@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site ECP Builder</title>
+<meta name="description" content="Build a two-page site Environmental Control Plan: map the site, mark key locations, auto-select applicable controls and print to PDF.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=IBM+Plex+Mono:wght@500;600&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style id="pageSize">@page { size: A3 landscape; margin: 0; }</style>
+<style>
+/* Layout: top bar, then a working sidebar (steps) beside a full-bleed map stage; step 5 swaps the map for paper previews. */
+:root{
+  --paper:#f2f4f1;      /* app ground, faint eucalyptus tint */
+  --panel:#ffffff;
+  --ink:#16211c;
+  --muted:#5a6862;
+  --line:#d6ddd8;
+  --accent:#1c5a44;     /* eucalyptus */
+  --accent-ink:#ffffff;
+  --accent-soft:#e1eee8;
+  --doc-red:#d52b1e;    /* document header red (template) */
+  --warn:#9f2a1d;
+  --f-display:'Archivo','Arial Narrow',Arial,sans-serif;
+  --f-body:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font:14px/1.45 var(--f-body);-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+
+#app{display:grid;grid-template-rows:auto 1fr;height:100%}
+.topbar{display:flex;align-items:center;gap:16px;padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));background:var(--ink);color:#eef3f0;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto}
+.brand-mark{width:28px;height:28px;border-radius:6px;background:var(--doc-red);display:grid;place-items:center}
+.brand h1{font:700 18px/1 var(--f-display);font-stretch:85%;letter-spacing:.01em;margin:0}
+.brand small{display:block;font:500 11px/1.2 var(--f-mono);color:#a9bbb2;margin-top:3px;letter-spacing:.04em}
+.tb-actions{display:flex;gap:6px;flex-wrap:wrap}
+.tb-btn{background:transparent;border:1px solid #3b4b44;color:#eef3f0;border-radius:6px;padding:6px 11px;cursor:pointer;font-size:13px}
+.tb-btn:hover{background:#24332c}
+
+main{display:grid;grid-template-columns:400px 1fr;min-height:0}
+main.wide{grid-template-columns:540px 1fr}
+.side{display:flex;flex-direction:column;min-height:0;background:var(--panel);border-right:1px solid var(--line)}
+.steps{display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--line)}
+.step{border:0;background:none;padding:10px 4px 9px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);border-bottom:3px solid transparent;font-size:12px}
+.step b{font:600 12px/1 var(--f-mono);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;border:1.5px solid currentColor}
+.step.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.step.done b{background:var(--accent);border-color:var(--accent);color:#fff}
+.side-body{flex:1;overflow:auto;padding:18px 18px 24px}
+.side-foot{display:flex;justify-content:space-between;gap:8px;padding:10px 18px;border-top:1px solid var(--line);background:#fafbfa}
+.side h2{font:700 21px/1.15 var(--f-display);font-stretch:90%;margin:0 0 4px;text-wrap:balance}
+.side h3{font:700 12px/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:22px 0 8px}
+.hint{color:var(--muted);margin:0 0 14px;font-size:13px}
+.stack{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#33413a}
+label.f input,label.f textarea,label.f select,.inp{border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:#fff;font-weight:400;font-size:14px;width:100%;min-width:0}
+textarea{resize:vertical}
+.btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:7px 12px;cursor:pointer;font-weight:600;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:#aab8b1}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.pri:hover{background:#164a38}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.danger{color:var(--warn)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.sm{padding:4px 8px;font-size:12px}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;padding:3px 0}
+.chk input{margin-top:3px;accent-color:var(--accent)}
+.note{background:var(--accent-soft);border-radius:6px;padding:9px 11px;font-size:13px;color:#21453a}
+
+.results{list-style:none;margin:6px 0 0;padding:0;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.results li button{width:100%;text-align:left;border:0;background:#fff;padding:8px 10px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--line)}
+.results li:last-child button{border-bottom:0}
+.results li button:hover{background:var(--accent-soft)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg label{padding:6px 12px;cursor:pointer;font-size:13px;border-right:1px solid var(--line)}
+.seg label:last-child{border-right:0}
+.seg input{display:none}
+.seg label:has(input:checked){background:var(--accent);color:#fff}
+
+/* palette */
+.palette{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.pal{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 8px;cursor:pointer;text-align:left;font-size:12.5px;line-height:1.25;min-height:42px}
+.pal:hover{border-color:#9fb0a8}
+.pal.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--accent-soft)}
+.pal .sw{flex:none;width:24px;height:24px;display:grid;place-items:center}
+.pal em{font-style:normal;font:500 10px var(--f-mono);color:var(--muted);display:block}
+.pal-group{font:600 11px/1 var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);grid-column:1/-1;margin-top:6px}
+
+/* feature list */
+.flist{display:flex;flex-direction:column;gap:6px}
+.fitem{border:1px solid var(--line);border-radius:6px;padding:8px;background:#fff;display:grid;grid-template-columns:24px 44px 1fr auto;gap:8px;align-items:center}
+.fitem.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.fitem code{font:600 12px var(--f-mono)}
+.fitem .inp{padding:5px 7px;font-size:13px}
+.fitem textarea.inp{grid-column:2/-1;min-height:32px;font-size:12.5px}
+.fitem .acts{display:flex;gap:2px}
+.icon-btn{border:0;background:none;cursor:pointer;padding:4px;border-radius:4px;color:var(--muted);display:grid;place-items:center}
+.icon-btn:hover{background:var(--paper);color:var(--ink)}
+.empty{border:1.5px dashed var(--line);border-radius:8px;padding:14px;color:var(--muted);font-size:13px;text-align:center}
+
+/* controls */
+.acts-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px}
+.sec{border:1px solid var(--line);border-radius:8px;background:#fff;margin-bottom:10px;overflow:hidden}
+.sec.off{background:#f7f8f7}
+.sec.off .sec-body{display:none}
+.sec-head{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid var(--line)}
+.sec.off .sec-head{border-bottom:0}
+.sec-head h4{margin:0;font:700 15px/1.2 var(--f-display);font-stretch:92%}
+.why{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.tag{font-size:11px;line-height:1;padding:4px 6px;border-radius:999px;background:var(--accent-soft);color:#21453a;white-space:nowrap}
+.tag.always{background:#eceeed;color:#4b5752}
+.tag.manual{background:#fde9e5;color:#8a2a1c}
+.sec-body{padding:8px 12px 10px}
+.bl{display:grid;grid-template-columns:18px 1fr auto;gap:6px;align-items:start;padding:3px 0}
+.bl input[type=checkbox]{margin-top:7px;accent-color:var(--accent)}
+.bl textarea{border:1px solid transparent;border-radius:5px;padding:4px 6px;font-size:13px;line-height:1.4;resize:none;overflow:hidden;width:100%;background:transparent}
+.bl textarea:hover{border-color:var(--line)}
+.bl textarea:focus{border-color:var(--accent);background:#fff;outline:none}
+.bl.dis textarea{color:#9aa5a0;text-decoration:line-through}
+.bl .edited{font-size:10.5px;color:var(--accent);border:0;background:none;cursor:pointer;padding:6px 2px;text-decoration:underline}
+.switch{position:relative;width:34px;height:20px;flex:none;margin-top:1px}
+.switch input{opacity:0;width:100%;height:100%;margin:0;position:absolute;cursor:pointer;z-index:1}
+.switch span{position:absolute;inset:0;background:#c5cec9;border-radius:999px;transition:.15s}
+.switch span::after{content:"";position:absolute;width:14px;height:14px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
+.switch input:checked+span{background:var(--accent)}
+.switch input:checked+span::after{left:17px}
+.switch input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+details.na{margin-top:14px}
+details.na summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--muted)}
+
+/* stage */
+.stage{position:relative;min-width:0;min-height:0}
+#map{position:absolute;inset:0;background:#cfd8d3}
+#map.drawing{cursor:crosshair}
+#map.drawing .leaflet-interactive{cursor:crosshair}
+.drawbar{position:absolute;z-index:800;top:12px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;border-radius:8px;padding:8px 10px 8px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:calc(100% - 24px);flex-wrap:wrap;font-size:13px}
+.drawbar .btn{padding:4px 10px;font-size:12px}
+.drawbar .btn.ghost{color:#c7d3cd}
+.maptip{position:absolute;z-index:700;left:12px;bottom:28px;background:rgba(255,255,255,.94);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--muted);box-shadow:0 1px 4px rgba(0,0,0,.2)}
+
+/* map symbols (editor + print) */
+.mk svg{display:block;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.55))}
+.mk-id{position:absolute;left:25px;top:50%;transform:translateY(-50%);background:#fff;color:#111;font:600 10px/1 var(--f-mono);padding:2px 4px;border-radius:2px;border:1px solid rgba(0,0,0,.4);white-space:nowrap;pointer-events:none}
+.mk.sel svg{outline:2.5px solid #fff;outline-offset:2px;border-radius:50%}
+.al span{position:absolute;left:0;top:0;transform:translate(-50%,-50%);background:#fff;color:#111;font:600 10.5px/1 var(--f-mono);padding:3px 5px;border-radius:2px;border:2px solid;white-space:nowrap}
+.al.sel span{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--accent)}
+.ah svg{display:block}
+.vx{width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid var(--ink)}
+.vx.first{background:var(--doc-red);border-color:#fff}
+
+/* preview */
+#preview{position:absolute;inset:0;overflow:auto;background:#d9dfdb;padding:24px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+.pv-holder{margin:0 auto 24px;position:relative;box-shadow:0 4px 18px rgba(20,35,28,.25)}
+.pv-scale{transform-origin:0 0;position:absolute;left:0;top:0}
+.pv-status{max-width:720px;margin:0 auto 14px;font-size:13px;color:#33413a;text-align:center}
+
+/* ---------- printed document ---------- */
+.page{--u:1;background:#fff;color:#111;display:flex;flex-direction:column;overflow:hidden;font-family:var(--f-body);-webkit-print-color-adjust:exact;print-color-adjust:exact;position:relative}
+.page.a3{--u:1.4142;width:420mm;height:297mm}
+.page.a4{width:297mm;height:210mm}
+.ph{display:grid;grid-template-columns:calc(var(--u)*44mm) 1fr calc(var(--u)*40mm) calc(var(--u)*26mm);height:calc(var(--u)*17mm);border-bottom:calc(var(--u)*.5mm) solid var(--bd,#111);flex:none}
+.ph>div{display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:0 calc(var(--u)*2mm);border-left:calc(var(--u)*.4mm) solid #fff}
+.ph-logo{background:#fff;border-left:0!important}
+.ph-logo img{max-height:calc(var(--u)*13mm);max-width:100%;object-fit:contain}
+.ph-logo .org{font:800 calc(var(--u)*13pt)/1.05 var(--f-display);font-stretch:90%;color:#111}
+.ph-logo .ph-ph{font-size:calc(var(--u)*7pt);color:#9aa;border:1px dashed #ccc;padding:2mm 3mm}
+.ph-title{color:#fff}
+.ph-title h1{margin:0;font:800 calc(var(--u)*22pt)/1 var(--f-display);font-stretch:95%;letter-spacing:.005em}
+.ph-title p{margin:calc(var(--u)*1mm) 0 0;font:600 calc(var(--u)*8.5pt)/1.1 var(--f-body);opacity:.95}
+.ph-ref,.ph-date{color:#fff;font-size:calc(var(--u)*7pt);line-height:1.3}
+.ph-ref b,.ph-date b{font-size:calc(var(--u)*8pt)}
+.pf{flex:none;display:flex;justify-content:space-between;gap:4mm;padding:calc(var(--u)*1.2mm) calc(var(--u)*4mm);font-size:calc(var(--u)*6.2pt);color:#555;border-top:calc(var(--u)*.25mm) solid #bbb}
+.pb{flex:1;min-height:0;display:flex}
+/* page 1 */
+.p1 .pmap-wrap{flex:1;min-width:0;position:relative;border-right:calc(var(--u)*.5mm) solid var(--bd,#111)}
+.p1 .pmap{position:absolute;inset:0;background:#e5e9e6}
+.north{position:absolute;z-index:600;top:calc(var(--u)*4mm);right:calc(var(--u)*4mm);width:calc(var(--u)*11mm);height:calc(var(--u)*15mm);background:rgba(255,255,255,.92);border-radius:calc(var(--u)*1mm);display:grid;place-items:center;padding:calc(var(--u)*1mm)}
+.north svg{width:100%;height:100%}
+.pleg{width:calc(var(--u)*64mm);flex:none;padding:calc(var(--u)*3mm) calc(var(--u)*3.5mm);display:flex;flex-direction:column;gap:calc(var(--u)*1.2mm);font-size:calc(var(--u)*7.4pt);overflow:hidden}
+.pleg h2{font:800 calc(var(--u)*11pt)/1 var(--f-display);font-stretch:95%;margin:0 0 calc(var(--u)*1mm)}
+.li{display:grid;grid-template-columns:calc(var(--u)*7mm) 1fr;gap:calc(var(--u)*1.6mm);align-items:center;line-height:1.2}
+.li .sw{display:grid;place-items:center}
+.li .sw svg{width:calc(var(--u)*5.6mm);height:calc(var(--u)*5.6mm)}
+.li small{display:block;font:500 calc(var(--u)*6.4pt)/1.25 var(--f-mono);color:#444}
+.sinfo{margin-top:auto;border-top:calc(var(--u)*.4mm) solid var(--bd,#111);padding-top:calc(var(--u)*2mm);display:grid;grid-template-columns:auto 1fr;gap:calc(var(--u)*.6mm) calc(var(--u)*2mm);font-size:calc(var(--u)*6.8pt)}
+.sinfo dt{font-weight:700}
+.sinfo dd{margin:0;overflow-wrap:anywhere}
+.disc{font-size:calc(var(--u)*5.8pt);color:#666;line-height:1.3}
+.page .leaflet-control-attribution{font-size:calc(var(--u)*5.5pt)}
+.page .leaflet-control-scale-line{font-size:calc(var(--u)*7pt);border-width:2px;border-color:#111;background:rgba(255,255,255,.85)}
+/* page 2+ */
+.p2{padding:calc(var(--u)*3mm)}
+.cols{flex:1;column-count:3;column-gap:calc(var(--u)*3mm);column-fill:auto;height:100%;overflow:hidden;font-size:calc(var(--u)*8pt)}
+.cb{break-inside:avoid;border:calc(var(--u)*.3mm) solid var(--bd,#222);padding:calc(var(--u)*1.6mm) calc(var(--u)*2.2mm) calc(var(--u)*1.8mm);margin:0 0 calc(var(--u)*2.4mm);line-height:1.32}
+.cb h3{margin:0 0 .45em;text-align:center;font:700 1.12em/1.15 var(--f-body)}
+.cb ul{margin:0;padding:0;list-style:none}
+.cb li{position:relative;padding-left:.95em;margin:0 0 .22em}
+.cb li::before{content:"•";position:absolute;left:0;top:0}
+.cb li.plain{padding-left:0;white-space:pre-line;text-align:center}
+.cb li.plain::before{content:none}
+.cb.hl{border:calc(var(--u)*.6mm) solid var(--hc,var(--doc-red))}
+.cb.hl li.plain{text-align:left;font-weight:600}
+.screen-only{}
+@media (max-width:860px){
+  #app{height:auto;min-height:100%}
+  main,main.wide{grid-template-columns:1fr;grid-template-rows:56vh auto}
+  .stage{grid-row:1}
+  .side{grid-row:2;border-right:0}
+  .side-body{overflow:visible}
+  .grid2,.acts-grid{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+@media print{
+  html,body,#app,main,.stage{display:block!important;height:auto!important;overflow:visible!important;background:#fff!important}
+  .topbar,.side,#mapWrap,.pv-status,.screen-only{display:none!important}
+  #preview{position:static!important;overflow:visible!important;padding:0!important;background:#fff!important}
+  .pv-holder{width:auto!important;height:auto!important;margin:0!important;box-shadow:none!important}
+  .pv-scale{position:static!important;transform:none!important}
+  .page{break-after:page;page-break-after:always}
+  .pv-holder:last-child .page{break-after:auto;page-break-after:auto}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></div>
+      <div><h1>Site ECP Builder</h1><small id="docChip">EHS-AUS-FRM-181 · Environmental Control Plan</small></div>
+    </div>
+    <div class="tb-actions">
+      <button class="tb-btn" id="btnExample" type="button">Load example</button>
+      <button class="tb-btn" id="btnOpen" type="button">Open plan…</button>
+      <button class="tb-btn" id="btnSave" type="button">Save plan file</button>
+      <button class="tb-btn" id="btnNew" type="button">New plan</button>
+      <input type="file" id="fileOpen" accept=".json,application/json" hidden>
+    </div>
+  </header>
+  <main id="main">
+    <aside class="side">
+      <nav class="steps" id="steps" aria-label="Steps"></nav>
+      <div class="side-body" id="sideBody"></div>
+      <div class="side-foot">
+        <button class="btn" id="btnBack" type="button">Back</button>
+        <button class="btn pri" id="btnNext" type="button">Next</button>
+      </div>
+    </aside>
+    <section class="stage">
+      <div id="mapWrap">
+        <div id="map" aria-label="Site map"></div>
+        <div class="drawbar" id="drawbar" hidden></div>
+        <div class="maptip" id="maptip" hidden></div>
+      </div>
+      <div id="preview" hidden></div>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+'use strict';
+/* =========================================================
+   Reference data
+   ========================================================= */
+const CATS = [
+  // From the EHS-AUS-FRM-181 map legend
+  {k:'receiver', name:'Sensitive receivers (residents)', geom:'area', code:'SR', color:'#d9b800', fill:'#f7e36b', fo:.45, grp:'t'},
+  {k:'sensenv',  name:'Sensitive environment (parkland)', geom:'area', code:'SE', color:'#3d8a45', fill:'#a8e0a8', fo:.45, grp:'t'},
+  {k:'waste',    name:'Waste management locations (bins)', geom:'point', code:'W', color:'#2e7d32', shape:'square', glyph:'bin', grp:'t'},
+  {k:'spillkit', name:'Spill kits', geom:'point', code:'SK', color:'#f5c400', ink:'#1a1a1a', shape:'triangle', glyph:'excl', grp:'t'},
+  {k:'hazchem',  name:'Hazardous chemical storage', geom:'point', code:'HC', color:'#e53935', shape:'square', glyph:'diamond', grp:'t'},
+  {k:'contam',   name:'Contaminated soil', geom:'area', code:'CS', color:'#6d4019', fill:'#b07a45', fo:.5, dash:'5 4', grp:'t'},
+  {k:'drain',    name:'Stormwater drains', geom:'point', code:'SD', color:'#173a85', shape:'square', glyph:'grate', grp:'t'},
+  {k:'potable',  name:'Potable water monitoring location', geom:'point', code:'PW', color:'#0277bd', shape:'circle', glyph:'target', grp:'t'},
+  {k:'gwwell',   name:'Groundwater monitoring wells', geom:'point', code:'GW', color:'#00695c', shape:'circle', glyph:'well', grp:'t'},
+  {k:'flow',     name:'Stormwater flow direction', geom:'arrow', code:'FD', color:'#1e88e5', grp:'t'},
+  // Additional "other as required"
+  {k:'refuel',   name:'Refuelling / plant maintenance area', geom:'point', code:'RF', color:'#ef6c00', shape:'circle', glyph:'pump', grp:'x'},
+  {k:'washdown', name:'Plant wash-down bay', geom:'point', code:'WD', color:'#00838f', shape:'circle', glyph:'waves', grp:'x'},
+  {k:'concrete', name:'Concrete washout', geom:'point', code:'CW', color:'#6b6b6b', shape:'circle', glyph:'cw', grp:'x'},
+  {k:'stockpile',name:'Stockpile', geom:'area', code:'SP', color:'#94652f', fill:'#dcb47e', fo:.55, grp:'x'},
+  {k:'erosion',  name:'Sediment fence / erosion control', geom:'line', code:'ES', color:'#8d5524', dash:'9 5', grp:'x'},
+  {k:'waterway', name:'Waterway / wetland', geom:'area', code:'WW', color:'#2b7bd0', fill:'#7cc0f2', fo:.45, grp:'x'},
+  {k:'nogo',     name:'No-go zone (protected vegetation / fauna)', geom:'area', code:'NG', color:'#c62828', fill:'#ef9a9a', fo:.3, dash:'7 4', grp:'x'},
+  {k:'heritage', name:'Heritage site', geom:'area', code:'HS', color:'#7b4fa8', fill:'#c9b1e6', fo:.4, grp:'x'},
+  {k:'compound', name:'Site compound / laydown', geom:'area', code:'SC', color:'#56616b', fill:'#b8c1c9', fo:.4, grp:'x'},
+  {k:'monitor',  name:'Noise / dust monitoring location', geom:'point', code:'MP', color:'#6a1b9a', shape:'circle', glyph:'bars', grp:'x'},
+  {k:'other',    name:'Other (as required)', geom:'point', code:'OT', color:'#37474f', shape:'circle', glyph:'plus', grp:'x'},
+];
+const CAT = Object.fromEntries(CATS.map(c=>[c.k,c]));
+
+const ACTS = [
+  ['earthworks','Earthworks, excavation or trenching'],
+  ['clearing','Vegetation clearing or trimming'],
+  ['demolition','Demolition'],
+  ['concrete','Concrete works'],
+  ['refuel','Refuelling or plant maintenance on site'],
+  ['chemicals','Use or storage of hazardous chemicals'],
+  ['painting','Painting, coating or abrasive blasting'],
+  ['workshop','Depot maintenance, workshop or manufacturing'],
+  ['waterway','Works in or next to a waterway'],
+  ['dewatering','Dewatering or groundwater extraction'],
+  ['nightworks','Works outside normal hours'],
+];
+const ACT = Object.fromEntries(ACTS);
+
+const F = k=>['f',k], A = k=>['a',k];
+/* Control library. Base bullets follow the template; conditional bullets switch on with the map and activities. */
+const SECTIONS = [
+  {id:'hours', title:'Normal Working Hours', always:true, trig:[A('nightworks')], bullets:[
+    {k:'h1', plain:true, t:c=>c.m.hours.trim() || 'Insert working hours.'},
+    {k:'h2', plain:true, t:'Works outside these hours require consultation with the EHS team.'},
+    {k:'h3', when:c=>c.a('nightworks'), t:'Approved out-of-hours works must follow the out-of-hours work procedure, with affected neighbours notified before works start.'},
+  ]},
+  {id:'incident', title:'Incident Reporting', always:true, trig:[], bullets:[
+    {k:'i1', plain:true, t:'All environmental incidents and near misses must be reported to your supervisor and the EHS representative immediately.'},
+    {k:'i2', plain:true, when:c=>c.m.ehsRep.trim(), t:c=>`EHS representative: ${c.m.ehsRep.trim()}${c.m.ehsPhone.trim()?' – '+c.m.ehsPhone.trim():''}`},
+    {k:'i3', when:c=>c.f('receiver'), t:'Pass any community complaint about noise, dust, odour or water to the EHS team the same day.'},
+  ]},
+  {id:'spills', title:'Spills', always:true, trig:[F('spillkit'),F('drain')], bullets:[
+    {k:'s1', t:'Spills will be contained and cleaned up immediately (where safe to do so) by project personnel, with remediation undertaken as required.'},
+    {k:'s2', t:'Report any hazardous spill to the EHS representative, regardless of quantity.'},
+    {k:'s3', when:c=>c.f('spillkit'), t:c=>`Spill kits are located at ${c.codes('spillkit')} (see map). Check contents monthly and restock after every use.`},
+    {k:'s4', when:c=>!c.f('spillkit') && (c.f('refuel')||c.f('hazchem')||c.f('washdown')||c.a('refuel')||c.a('chemicals')), t:'Keep a spill kit next to refuelling, chemical storage and wash-down areas.'},
+    {k:'s5', when:c=>c.f('drain'), t:c=>`Cover nearby stormwater drains (${c.codes('drain')}) before cleaning up a spill.`},
+  ]},
+  {id:'hazmat', title:'Hazardous Materials', trig:[F('hazchem'),F('refuel'),F('spillkit'),A('chemicals'),A('refuel'),A('painting'),A('workshop')], bullets:[
+    {k:'hm1', t:'Store, handle, use and dispose of hazardous substances in a way that minimises environmental impact, in accordance with the manufacturer’s specifications and Safety Data Sheet (SDS).'},
+    {k:'hm2', t:'Label all hazardous substances in accordance with the relevant Australian Standards.'},
+    {k:'hm3', t:'For minor storages, keep all hazardous substances in spill pallets, bunded containers or other containment, protected from the weather.'},
+    {k:'hm4', when:c=>c.f('hazchem'), t:c=>`Hazardous chemicals are stored at ${c.codes('hazchem')}. Keep a current chemical register and SDS at each store.`},
+    {k:'hm5', when:c=>c.f('hazchem'), t:'Keep incompatible substances apart, and keep stores signed and secured.'},
+    {k:'hm6', when:c=>c.f('refuel')||c.a('refuel'), t:c=>`Refuel only at ${c.loc('refuel','designated refuelling areas away from drains and waterways')}, using drip trays, with the operator present at all times.`},
+    {k:'hm7', when:c=>c.a('painting'), t:'Contain paint, coating and blasting residues with tarps, screens or enclosures, and dispose of them as hazardous waste.'},
+  ]},
+  {id:'flora', title:'Flora and Fauna', trig:[F('sensenv'),F('nogo'),F('waterway'),A('clearing')], bullets:[
+    {k:'ff1', t:'Do not intentionally damage protected flora or injure fauna.'},
+    {k:'ff2', t:'Consult the EHS team before any vegetation clearing.'},
+    {k:'ff3', t:'Do not handle wildlife. If native wildlife is found on site, contact the EHS representative, who will arrange a licensed wildlife handler or ecologist.'},
+    {k:'ff4', when:c=>c.f('nogo'), t:c=>`No-go zones (${c.codes('nogo')}) must be fenced or flagged and kept free of people, plant and materials.`},
+    {k:'ff5', when:c=>c.f('sensenv'), t:c=>`Sensitive environment (${c.codes('sensenv')}): keep vehicles, stockpiles and laydown out of this area.`},
+    {k:'ff6', when:c=>c.a('clearing'), t:'Check for nests, hollows and burrows before clearing. Stop work and call the EHS representative if fauna is found.'},
+  ]},
+  {id:'weeds', title:'Weeds', trig:[A('clearing'),A('earthworks'),F('sensenv'),F('nogo')], bullets:[
+    {k:'wd1', t:'Plant and equipment must be clean and free of weeds, soil and mud before arriving on site.'},
+    {k:'wd2', t:'Monitor and manage noxious weeds regularly.'},
+    {k:'wd3', when:c=>c.a('earthworks')||c.a('clearing'), t:'Do not take soil, mulch or green waste off site from weed-affected areas without EHS approval.'},
+  ]},
+  {id:'soilwater', title:'Soil and Water', trig:[F('drain'),F('flow'),F('stockpile'),F('washdown'),F('concrete'),F('contam'),F('waterway'),F('erosion'),F('refuel'),A('earthworks'),A('concrete'),A('waterway'),A('dewatering'),A('workshop')], bullets:[
+    {k:'sw1', t:'Store materials away from drainage lines and stormwater drains to prevent contaminated stormwater runoff.'},
+    {k:'sw2', t:'Monitor and maintain stormwater discharge points, bio-retention basins and perimeter drains.'},
+    {k:'sw3', t:'Wash down and maintain plant only in approved, designated locations with a fully bunded facility that captures all materials.'},
+    {k:'sw4', t:'Clean up fuel or chemical spills near waterways or stormwater drains, and from refuelling and servicing of plant, as soon as possible.'},
+    {k:'sw5', t:'Notify the EHS representative of any discharge to stormwater.'},
+    {k:'sw6', t:'Manage sediment runoff from cleared areas and stockpiles.'},
+    {k:'sw7', when:c=>c.f('drain'), t:c=>`Stormwater drains on site: ${c.codes('drain')}. Protect drain inlets with sediment controls (e.g. filter socks or geotextile) during works.`},
+    {k:'sw8', when:c=>c.f('flow'), t:'Stormwater flow paths are shown by blue arrows on the map. Place sediment controls downslope of work areas and stockpiles.'},
+    {k:'sw9', when:c=>c.f('washdown'), t:c=>`Wash down plant only at ${c.codes('washdown')}. Wash water must be captured and must not enter stormwater.`},
+    {k:'sw10', when:c=>c.f('concrete')||c.a('concrete'), t:c=>`Wash out concrete trucks and tools only at ${c.loc('concrete','a designated, lined concrete washout')}, never into drains or onto bare ground.`},
+    {k:'sw11', when:c=>c.f('stockpile'), t:c=>`Stockpiles (${c.codes('stockpile')}) must be kept away from drains and waterways, covered or stabilised, with sediment fencing on the downslope side.`},
+    {k:'sw12', when:c=>c.f('erosion')||c.a('earthworks'), t:c=>`Install and maintain erosion and sediment controls${c.f('erosion')?' ('+c.codes('erosion')+')':''}. Inspect weekly and after rain.`},
+    {k:'sw13', when:c=>c.f('waterway')||c.a('waterway'), t:c=>`Keep plant, materials and works out of waterways${c.f('waterway')?' ('+c.codes('waterway')+')':''} and their banks unless approved.`},
+  ]},
+  {id:'contam', title:'Contaminated Land', trig:[F('contam'),A('earthworks')], bullets:[
+    {k:'cl1', when:c=>c.f('contam'), t:c=>`Known contaminated soil: ${c.codes('contam')}. Excavation or disturbance in these areas requires EHS approval.`},
+    {k:'cl2', when:c=>c.f('contam'), t:'Contaminated soil must not leave site unless it has been classified and is taken to a licensed facility with waste tracking documentation.'},
+    {k:'cl3', when:c=>c.f('contam'), t:'Keep contaminated stockpiles separate from clean material, on plastic sheeting and covered.'},
+    {k:'cl4', t:'If unexpected contamination is found (odours, staining, asbestos or buried waste), stop work, isolate the area and contact the EHS representative.'},
+  ]},
+  {id:'groundwater', title:'Groundwater', trig:[F('gwwell'),A('dewatering')], bullets:[
+    {k:'gw1', when:c=>c.f('gwwell'), t:c=>`Groundwater monitoring wells (${c.codes('gwwell')}) must be kept capped, marked and protected from damage by plant.`},
+    {k:'gw2', when:c=>c.a('dewatering'), t:'Dewatering requires EHS approval. Test water before discharge and never pump to stormwater without approval.'},
+    {k:'gw3', t:'Report any damage to a well, or any sign of groundwater contamination, to the EHS representative.'},
+  ]},
+  {id:'heritage', title:'Cultural Heritage', trig:[F('heritage'),A('earthworks')], bullets:[
+    {k:'he1', when:c=>c.f('heritage'), t:c=>`Heritage site(s): ${c.codes('heritage')}. Do not disturb, enter or store materials in these areas without approval.`},
+    {k:'he2', t:'If suspected Aboriginal cultural heritage or historical artefacts are found, stop work, protect the area and contact the EHS representative.'},
+    {k:'he3', t:'If suspected human remains are found, stop work immediately, secure the area and notify police and the EHS representative.'},
+  ]},
+  {id:'air', title:'Air Quality, Dust, Odour and Noise', trig:[F('receiver'),F('stockpile'),F('monitor'),A('earthworks'),A('demolition'),A('nightworks'),A('painting'),A('workshop')], bullets:[
+    {k:'aq1', t:'Maintain vehicles, plant and equipment regularly.'},
+    {k:'aq2', t:'Visually monitor for any emissions leaving the site.'},
+    {k:'aq3', t:'Report any community complaint about air emissions or noise to the EHS team.'},
+    {k:'aq4', t:'Report excessive odour or noise to the EHS team.'},
+    {k:'aq5', t:'Carry out works only during approved working hours.'},
+    {k:'aq6', when:c=>c.f('receiver'), t:c=>`Sensitive receivers: ${c.codes('receiver')}. Schedule the noisiest works for the middle of the day and use the quietest plant available.`},
+    {k:'aq7', when:c=>c.a('earthworks')||c.f('stockpile')||c.a('demolition'), t:'Suppress dust with water carts or sprays. Stop dust-generating works in high winds if dust is leaving the site.'},
+    {k:'aq8', when:c=>c.f('monitor'), t:c=>`Noise and dust monitoring locations: ${c.codes('monitor')}.`},
+    {k:'aq9', when:c=>c.f('receiver')||c.a('nightworks'), t:'Use broadband (non-tonal) reversing alarms on plant where possible.'},
+  ]},
+  {id:'waste', title:'Waste', always:true, trig:[F('waste'),F('hazchem'),F('refuel'),A('workshop'),A('demolition')], bullets:[
+    {k:'w1', t:'Segregate waste: hazardous / non-hazardous, and recyclable / landfill.'},
+    {k:'w2', t:'Use the right bin for each waste type. Do not contaminate recycling bins.'},
+    {k:'w3', t:'Waste must be transported by an approved, licensed transporter.'},
+    {k:'w4', t:'Provide appropriate waste bins (general, recycling and contaminated).'},
+    {k:'w5', when:c=>c.f('waste'), t:c=>`Waste bins are located at ${c.codes('waste')} (see map).`},
+    {k:'w6', when:c=>c.f('hazchem')||c.f('refuel')||c.a('workshop')||c.a('chemicals')||c.a('painting'), t:'Store hazardous waste (e.g. oils, oily rags, chemical containers) in labelled, bunded containers for removal by a licensed contractor.'},
+    {k:'w7', when:c=>c.a('demolition'), t:'Check for asbestos and other hazardous materials before demolition, and handle them according to the hazardous materials survey.'},
+    {k:'w8', t:'Keep waste dockets and disposal certificates for monthly reporting.'},
+  ]},
+  {id:'water', title:'Water', always:true, trig:[F('potable')], bullets:[
+    {k:'wa1', t:'Turn off taps when not in use.'},
+    {k:'wa2', t:'Prevent excessive water use in manufacturing and maintenance processes.'},
+    {k:'wa3', when:c=>c.f('potable'), t:c=>`Potable water monitoring point(s): ${c.codes('potable')}. Keep them accessible and protected from contamination.`},
+    {k:'wa4', t:'Report leaking taps, hoses or pipes for repair.'},
+  ]},
+  {id:'energy', title:'Energy', always:true, trig:[], bullets:[
+    {k:'en1', t:'Turn off equipment when not in use.'},
+    {k:'en2', t:'Do not leave plant and vehicles idling.'},
+    {k:'en3', t:'Turn off lights and air conditioning in site offices and amenities when unoccupied.'},
+  ]},
+  {id:'notes', title:'Site-Specific Notes', dynamic:true, trig:[], bullets:[]},
+  {id:'targets', title:'Environmental Targets', always:true, hl:true, trig:[], bullets:[
+    {k:'t1', plain:true, t:c=>'Waste – '+(c.m.tWaste.trim()||'')},
+    {k:'t2', plain:true, t:c=>'Water – '+(c.m.tWater.trim()||'')},
+    {k:'t3', plain:true, t:c=>'Energy – '+(c.m.tEnergy.trim()||'')},
+  ]},
+];
+
+const todayISO = ()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+const DEFAULT = ()=>({
+  v:1,
+  meta:{siteName:'',address:'',project:'',docRef:'EHS-AUS-FRM-181',version:'01',appDate:todayISO(),preparedBy:'',approvedBy:'',ehsRep:'',ehsPhone:'',
+    hours:'Monday to Friday: 7:00 am – 6:00 pm\nSaturday: 7:00 am – 1:00 pm\nNo works on Sundays or public holidays',
+    tWaste:'',tWater:'',tEnergy:'',orgName:'',logo:'',headerColor:'#d52b1e',borderColor:'#222222'},
+  view:{center:[-37.8136,144.9631],zoom:12},
+  basemap:'aerial', labels:true,
+  boundary:null, features:[], activities:{}, sec:{},
+  print:{paper:'A3',fullLegend:false,zoomAdj:0},
+});
+
+/* =========================================================
+   State & persistence
+   ========================================================= */
+const KEY='site-ecp-builder-v1';
+let S = load() || DEFAULT();
+let step = 0, sel = null, draw = null;
+
+function merge(base, o){
+  if(!o||typeof o!=='object') return base;
+  for(const k of Object.keys(base)){
+    if(!(k in o)) continue;
+    if(base[k] && typeof base[k]==='object' && !Array.isArray(base[k]) && o[k] && typeof o[k]==='object' && !Array.isArray(o[k]) && k!=='sec' && k!=='activities') base[k]=merge(base[k],o[k]);
+    else base[k]=o[k];
+  }
+  return base;
+}
+function load(){ try{ const raw=localStorage.getItem(KEY); return raw?merge(DEFAULT(),JSON.parse(raw)):null; }catch(e){ return null; } }
+let saveT=null;
+function persist(){ clearTimeout(saveT); saveT=setTimeout(()=>{ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){ /* quota or blocked: plan file save still works */ } },250); }
+
+/* =========================================================
+   Helpers
+   ========================================================= */
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const esc = s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = ()=>Math.random().toString(36).slice(2,10);
+const fmtDate = iso=>{ if(!iso) return ''; const [y,m,d]=iso.split('-'); return d&&m&&y?`${d}/${m}/${y}`:iso; };
+
+function codeMap(){ const n={},o={}; for(const f of S.features){ n[f.type]=(n[f.type]||0)+1; o[f.id]=CAT[f.type].code+n[f.type]; } return o; }
+function areaM2(pts){ const R=6378137,d=Math.PI/180; let a=0; for(let i=0;i<pts.length;i++){const p=pts[i],q=pts[(i+1)%pts.length]; a+=(q[1]-p[1])*d*(2+Math.sin(p[0]*d)+Math.sin(q[0]*d));} return Math.abs(a*R*R/2); }
+function fmtArea(m2){ return m2>=10000?(m2/10000).toFixed(m2>=1e6?0:2)+' ha':Math.round(m2).toLocaleString('en-AU')+' m²'; }
+function centroid(pts){ let la=0,ln=0; pts.forEach(p=>{la+=p[0];ln+=p[1];}); return [la/pts.length,ln/pts.length]; }
+
+/* =========================================================
+   Symbols
+   ========================================================= */
+function glyph(g, ink){
+  const s=`fill="none" stroke="${ink}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"`;
+  switch(g){
+    case 'bin': return `<path ${s} d="M8.2 9.5h7.6l-.8 7.8H9z M6.8 9.5h10.4 M10.3 7.3h3.4"/>`;
+    case 'excl': return `<path ${s} stroke-width="2.3" d="M12 9.6v5 M12 17.6v.1"/>`;
+    case 'diamond': return `<path ${s} d="M12 5.8l6.2 6.2-6.2 6.2-6.2-6.2z M12 9.4v3.2 M12 14.9v.1"/>`;
+    case 'pump': return `<path ${s} d="M8 17.5V7.6c0-.5.4-.9.9-.9h4.2c.5 0 .9.4.9.9v9.9 M7 17.5h8 M8 10.8h6 M14 9.6l2.4 1.6v4.2a.9.9 0 0 0 1.8 0v-5.6l-1.6-1.6"/>`;
+    case 'waves': return `<path ${s} d="M6.2 10.2c1.4-1.4 2.8 1.4 4.2 0s2.8 1.4 4.2 0 2.8 1.4 3.2 0 M6.2 14.4c1.4-1.4 2.8 1.4 4.2 0s2.8 1.4 4.2 0 2.8 1.4 3.2 0"/>`;
+    case 'cw': return `<text x="12" y="15.2" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="8.6" font-weight="700" fill="${ink}">CW</text>`;
+    case 'grate': return `<path ${s} d="M7 7h10v10H7z M7 10.4h10 M7 13.7h10"/>`;
+    case 'target': return `<circle ${s} cx="12" cy="12" r="5.8"/><circle cx="12" cy="12" r="2.2" fill="${ink}"/>`;
+    case 'well': return `<circle ${s} cx="12" cy="12" r="5"/><path ${s} d="M12 4.6v14.8 M4.6 12h14.8"/>`;
+    case 'bars': return `<path ${s} d="M8 10.2v3.6 M11 7.6v8.8 M14 9.2v5.6 M17 11v2"/>`;
+    case 'plus': return `<path ${s} stroke-width="2.3" d="M12 7.5v9 M7.5 12h9"/>`;
+  }
+  return '';
+}
+function pointSvg(c, size=24){
+  const ink=c.ink||'#fff', st=`stroke="${c.ink?'#1a1a1a':'#fff'}" stroke-width="1.4"`;
+  let shape='';
+  if(c.shape==='square') shape=`<rect x="2" y="2" width="20" height="20" rx="3" fill="${c.color}" ${st}/>`;
+  else if(c.shape==='triangle') shape=`<path d="M12 1.6 22.6 21.2H1.4Z" fill="${c.color}" ${st} stroke-linejoin="round"/>`;
+  else shape=`<circle cx="12" cy="12" r="10.4" fill="${c.color}" ${st}/>`;
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true">${shape}${glyph(c.glyph,ink)}</svg>`;
+}
+function swatchSvg(c, size=24){
+  if(c.k==='__boundary') return `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><rect x="3" y="5" width="18" height="14" fill="none" stroke="#fff" stroke-width="5"/><rect x="3" y="5" width="18" height="14" fill="none" stroke="#e8261b" stroke-width="2.4" stroke-dasharray="5 3"/></svg>`;
+  if(c.geom==='point') return pointSvg(c,size);
+  if(c.geom==='area') return `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><rect x="2.5" y="4" width="19" height="16" fill="${c.fill}" stroke="${c.color}" stroke-width="2" ${c.dash?`stroke-dasharray="${c.dash.split(' ').map(n=>n/2).join(' ')}"`:''}/></svg>`;
+  if(c.geom==='line') return `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><path d="M2 15c5-6 9 2 20-5" fill="none" stroke="${c.color}" stroke-width="3" stroke-dasharray="5 3"/></svg>`;
+  if(c.geom==='arrow') return `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><path d="M3 12h13" stroke="${c.color}" stroke-width="3.4" fill="none"/><path d="M14 6l8 6-8 6z" fill="${c.color}"/></svg>`;
+  return '';
+}
+function bearingDeg(a,b){ const lat=(a[0]+b[0])/2*Math.PI/180; return -Math.atan2(b[0]-a[0],(b[1]-a[1])*Math.cos(lat))*180/Math.PI; }
+
+/* Draw boundary + features onto a Leaflet layer group. Shared by the editor and the print map. */
+function drawAll(group, {interactive=false, onPick=null, k=1}={}){
+  group.clearLayers();
+  if(S.boundary && S.boundary.length>2){
+    L.polygon(S.boundary,{color:'#fff',weight:7*k,opacity:.9,fill:false,interactive:false}).addTo(group);
+    L.polygon(S.boundary,{color:'#e8261b',weight:3.2*k,dashArray:`${12*k} ${7*k}`,fill:false,interactive:false}).addTo(group);
+  }
+  const codes=codeMap();
+  const order={area:0,line:1,arrow:2,point:3}, sz=Math.round(24*k), lf=`font-size:${(10.5*k).toFixed(1)}px`;
+  const list=[...S.features].sort((a,b)=>order[CAT[a.type].geom]-order[CAT[b.type].geom]);
+  for(const f of list){
+    const c=CAT[f.type], code=codes[f.id], isSel=interactive&&sel===f.id;
+    const pick = onPick?(()=>onPick(f.id)):null;
+    if(c.geom==='point'){
+      const m=L.marker(f.coords[0],{icon:L.divIcon({className:'mk'+(isSel?' sel':''),html:pointSvg(c,sz)+`<span class="mk-id" style="left:${sz+1}px;${lf}">${esc(code)}</span>`,iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]}),draggable:interactive,interactive,keyboard:false,title:interactive?(f.label||c.name):''}).addTo(group);
+      if(interactive){ m.on('click',pick); m.on('dragend',e=>{const p=e.target.getLatLng(); f.coords=[[p.lat,p.lng]]; persist();}); }
+    } else if(c.geom==='area'){
+      const p=L.polygon(f.coords,{color:c.color,weight:(isSel?4:2.4)*k,fillColor:c.fill,fillOpacity:c.fo,dashArray:c.dash||null,interactive}).addTo(group);
+      if(interactive) p.on('click',pick);
+      const lm=L.marker(centroid(f.coords),{icon:L.divIcon({className:'al'+(isSel?' sel':''),html:`<span style="border-color:${c.color};${lf}">${esc(code)}</span>`,iconSize:[0,0],iconAnchor:[0,0]}),interactive,keyboard:false}).addTo(group);
+      if(interactive) lm.on('click',pick);
+    } else if(c.geom==='line'){
+      L.polyline(f.coords,{color:'#fff',weight:6*k,opacity:.75,interactive:false}).addTo(group);
+      const p=L.polyline(f.coords,{color:c.color,weight:(isSel?5:3.5)*k,dashArray:c.dash,interactive}).addTo(group);
+      if(interactive) p.on('click',pick);
+      const mid=f.coords[Math.floor((f.coords.length-1)/2)];
+      const lm=L.marker(mid,{icon:L.divIcon({className:'al'+(isSel?' sel':''),html:`<span style="border-color:${c.color};${lf}">${esc(code)}</span>`,iconSize:[0,0],iconAnchor:[0,0]}),interactive,keyboard:false}).addTo(group);
+      if(interactive) lm.on('click',pick);
+    } else if(c.geom==='arrow'){
+      L.polyline(f.coords,{color:'#fff',weight:8*k,opacity:.8,interactive:false}).addTo(group);
+      const p=L.polyline(f.coords,{color:c.color,weight:(isSel?6:4.5)*k,interactive}).addTo(group);
+      if(interactive) p.on('click',pick);
+      const n=f.coords.length, a=f.coords[n-2], b=f.coords[n-1], deg=bearingDeg(a,b);
+      L.marker(b,{icon:L.divIcon({className:'ah',html:`<svg width="${22*k}" height="${22*k}" viewBox="0 0 22 22" style="transform:rotate(${deg}deg);transform-origin:${19*k}px ${11*k}px"><path d="M2 2.5 19 11 2 19.5 6.5 11z" fill="${c.color}" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>`,iconSize:[22*k,22*k],iconAnchor:[19*k,11*k]}),interactive:false,keyboard:false}).addTo(group);
+    }
+  }
+}
+function boundsAll(){
+  const pts=[]; if(S.boundary) pts.push(...S.boundary); S.features.forEach(f=>pts.push(...f.coords));
+  return pts.length?L.latLngBounds(pts):null;
+}
+function baseLayers(){
+  const o={maxZoom:21,maxNativeZoom:19};
+  if(S.basemap==='streets') return [L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{...o,attribution:'© OpenStreetMap contributors'})];
+  const out=[L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{...o,attribution:'Imagery © Esri, Maxar, Earthstar Geographics'})];
+  if(S.labels){
+    out.push(L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',{...o,opacity:.85}));
+    out.push(L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',o));
+  }
+  return out;
+}
+
+/* =========================================================
+   Editor map
+   ========================================================= */
+const map = L.map('map',{zoomControl:true,zoomSnap:.5}).setView(S.view.center,S.view.zoom);
+L.control.scale({imperial:false}).addTo(map);
+let baseNow=[];
+function setBase(){ baseNow.forEach(l=>map.removeLayer(l)); baseNow=baseLayers(); baseNow.forEach(l=>l.addTo(map)); }
+setBase();
+const fGroup=L.layerGroup().addTo(map);
+const tmpGroup=L.layerGroup().addTo(map);
+function renderMap(){ drawAll(fGroup,{interactive:!draw,onPick:id=>selectFeature(id,true)}); }
+map.on('moveend',()=>{ const c=map.getCenter(); S.view={center:[c.lat,c.lng],zoom:map.getZoom()}; persist(); });
+
+function selectFeature(id, fromMap){
+  if(draw) return;
+  sel=id; renderMap();
+  if(step!==1 && fromMap){ go(1); }
+  $$('.fitem').forEach(el=>el.classList.toggle('sel',el.dataset.id===id));
+  const el=$(`.fitem[data-id="${id}"]`); if(el&&fromMap) el.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+
+/* ---------- drawing ---------- */
+function startDraw(kind, replaceId=null){
+  cancelDraw(true);
+  const geom = kind==='boundary'?'area':CAT[kind].geom;
+  draw={kind,geom,pts:[],replaceId};
+  map.doubleClickZoom.disable();
+  $('#map').classList.add('drawing');
+  renderMap(); updateDrawbar(); refreshPalette();
+}
+function cancelDraw(silent){
+  if(!draw) return;
+  draw=null; tmpGroup.clearLayers(); map.doubleClickZoom.enable();
+  $('#map').classList.remove('drawing'); $('#drawbar').hidden=true;
+  renderMap();
+  if(!silent){ refreshPalette(); }
+}
+function minPts(){ return draw.geom==='area'?3:2; }
+function finishDraw(){
+  if(!draw) return;
+  if(draw.pts.length<minPts()){ flashBar(draw.geom==='area'?'An area needs at least 3 points.':'A line needs at least 2 points.'); return; }
+  const pts=draw.pts.map(p=>[+p[0].toFixed(7),+p[1].toFixed(7)]);
+  if(draw.kind==='boundary'){ S.boundary=pts; }
+  else if(draw.replaceId){ const f=S.features.find(x=>x.id===draw.replaceId); if(f) f.coords=pts; sel=draw.replaceId; }
+  else { const f={id:uid(),type:draw.kind,label:'',note:'',coords:pts}; S.features.push(f); sel=f.id; }
+  const wasBoundary=draw.kind==='boundary';
+  cancelDraw(); persist(); renderMap(); renderSide();
+  if(wasBoundary) map.fitBounds(L.latLngBounds(S.boundary),{padding:[40,40]});
+}
+function updateTmp(cursor){
+  tmpGroup.clearLayers(); if(!draw) return;
+  const c=draw.kind==='boundary'?{color:'#e8261b'}:CAT[draw.kind];
+  const pts=draw.pts.slice(); if(cursor && pts.length) pts.push(cursor);
+  if(pts.length>1){
+    if(draw.geom==='area' && pts.length>2) L.polygon(pts,{color:c.color,weight:2,dashArray:'6 4',fillColor:c.fill||c.color,fillOpacity:.2,interactive:false}).addTo(tmpGroup);
+    else L.polyline(pts,{color:c.color,weight:3,dashArray:'6 4',interactive:false}).addTo(tmpGroup);
+  }
+  draw.pts.forEach((p,i)=>L.marker(p,{icon:L.divIcon({className:'vx'+(i===0?' first':''),iconSize:[10,10]}),interactive:false}).addTo(tmpGroup));
+}
+function updateDrawbar(msg){
+  const bar=$('#drawbar'); if(!draw){bar.hidden=true;return;}
+  const name=draw.kind==='boundary'?'site boundary':CAT[draw.kind].name.toLowerCase();
+  let txt;
+  if(draw.geom==='point') txt=`Click the map to place <b>${esc(name)}</b>. Keep clicking to add more.`;
+  else if(draw.geom==='area') txt=`Click to outline the <b>${esc(name)}</b>. Click the first point or double-click to close.`;
+  else txt=`Click to draw the <b>${esc(name)}</b>${draw.geom==='arrow'?' in the direction of flow':''}. Double-click to finish.`;
+  if(msg) txt=`<b>${esc(msg)}</b>`;
+  bar.innerHTML=`<span>${txt}</span>`+
+    (draw.geom!=='point'?`<button class="btn sm" type="button" data-d="undo">Undo point</button><button class="btn sm pri" type="button" data-d="finish">Finish</button>`:'')+
+    `<button class="btn sm ghost" type="button" data-d="cancel">${draw.geom==='point'?'Done':'Cancel'}</button>`;
+  bar.hidden=false;
+}
+function flashBar(m){ updateDrawbar(m); setTimeout(()=>updateDrawbar(),1800); }
+$('#drawbar').addEventListener('click',e=>{
+  const d=e.target.closest('[data-d]')?.dataset.d; if(!d) return;
+  if(d==='undo'){ draw.pts.pop(); updateTmp(); }
+  if(d==='finish') finishDraw();
+  if(d==='cancel'){ cancelDraw(); renderSide(); }
+});
+map.on('click',e=>{
+  if(!draw) return;
+  const p=[e.latlng.lat,e.latlng.lng];
+  if(draw.geom==='point'){
+    const f={id:uid(),type:draw.kind,label:'',note:'',coords:[p]}; S.features.push(f); sel=f.id; persist(); renderMap(); renderSide(); return;
+  }
+  if(draw.geom==='area' && draw.pts.length>=3){
+    const a=map.latLngToContainerPoint(draw.pts[0]), b=map.latLngToContainerPoint(e.latlng);
+    if(a.distanceTo(b)<12){ finishDraw(); return; }
+  }
+  draw.pts.push(p); updateTmp();
+});
+map.on('dblclick',e=>{
+  if(!draw||draw.geom==='point') return;
+  const n=draw.pts.length;
+  if(n>=2){ const a=map.latLngToContainerPoint(draw.pts[n-1]), b=map.latLngToContainerPoint(draw.pts[n-2]); if(a.distanceTo(b)<4) draw.pts.pop(); }
+  finishDraw();
+});
+map.on('mousemove',e=>{ if(draw&&draw.geom!=='point'&&draw.pts.length) updateTmp([e.latlng.lat,e.latlng.lng]); });
+document.addEventListener('keydown',e=>{
+  if(!draw) return; const t=e.target.tagName; if(t==='INPUT'||t==='TEXTAREA') return;
+  if(e.key==='Escape'){ cancelDraw(); renderSide(); }
+  if(e.key==='Enter') finishDraw();
+  if(e.key==='Backspace'&&draw.pts.length){ e.preventDefault(); draw.pts.pop(); updateTmp(); }
+});
+
+/* =========================================================
+   Controls engine
+   ========================================================= */
+function ctx(){
+  const codes=codeMap(), have=new Set(S.features.map(f=>f.type));
+  const list=k=>S.features.filter(f=>f.type===k).map(f=>codes[f.id]).join(', ');
+  return {m:S.meta, f:k=>have.has(k), a:k=>!!S.activities[k], codes:list, loc:(k,fb)=>list(k)||fb, codeOf:id=>codes[id]};
+}
+function computeSections(){
+  const c=ctx(), out=[];
+  for(const s of SECTIONS){
+    const st=S.sec[s.id]||{};
+    const reasons=[];
+    for(const [t,k] of s.trig){ if(t==='f'&&c.f(k)) reasons.push(CAT[k].name.replace(/\s*\(.*\)$/,'')+' on map'); if(t==='a'&&c.a(k)) reasons.push(ACT[k]); }
+    let bullets=[];
+    if(s.dynamic){
+      for(const f of S.features){
+        if(!(f.note?.trim()||(f.type==='other'&&f.label?.trim()))) continue;
+        const lab=f.label?.trim()?` ${f.label.trim()}`:'';
+        bullets.push({k:'n_'+f.id, auto:`${c.codeOf(f.id)}${lab?' –'+lab:''}${f.note?.trim()?': '+f.note.trim():''}`});
+      }
+      if(bullets.length) reasons.push('Notes added to map locations');
+    } else {
+      for(const b of s.bullets){ if(b.when && !b.when(c)) continue; bullets.push({k:b.k,plain:!!b.plain,auto:typeof b.t==='function'?b.t(c):b.t}); }
+    }
+    bullets=bullets.map(b=>({...b,text:(st.edit&&st.edit[b.k]!=null)?st.edit[b.k]:b.auto,edited:!!(st.edit&&st.edit[b.k]!=null),on:!(st.off&&st.off[b.k])}));
+    (st.custom||[]).forEach(cu=>bullets.push({k:cu.id,custom:true,text:cu.text,auto:cu.text,on:true}));
+    const auto = !!s.always || reasons.length>0;
+    const included = st.force===true ? true : st.force===false ? false : auto;
+    out.push({s,reasons,bullets,auto,included,force:st.force});
+  }
+  return out;
+}
+function secState(id){ return S.sec[id]||(S.sec[id]={}); }
+
+/* =========================================================
+   Sidebar: steps
+   ========================================================= */
+const STEPS=['Site','Locations','Controls','Details','Print'];
+function stepDone(i){
+  if(i===0) return !!(S.boundary||S.meta.siteName.trim());
+  if(i===1) return S.features.length>0;
+  if(i===2) return S.features.length>0||Object.values(S.activities).some(Boolean);
+  if(i===3) return !!(S.meta.siteName.trim()&&S.meta.preparedBy.trim());
+  return false;
+}
+function renderSteps(){
+  $('#steps').innerHTML=STEPS.map((n,i)=>`<button type="button" class="step${i===step?' on':''}${stepDone(i)&&i!==step?' done':''}" data-step="${i}" aria-current="${i===step?'step':'false'}"><b>${stepDone(i)&&i!==step?'✓':i+1}</b>${n}</button>`).join('');
+}
+$('#steps').addEventListener('click',e=>{ const b=e.target.closest('[data-step]'); if(b) go(+b.dataset.step); });
+$('#btnBack').onclick=()=>go(Math.max(0,step-1));
+$('#btnNext').onclick=()=>{ if(step===4){ doPrint(); } else go(step+1); };
+
+function go(i){
+  if(draw) cancelDraw(true);
+  step=i; $('#main').classList.toggle('wide',i===2);
+  const pv=i===4;
+  $('#mapWrap').hidden=pv; $('#preview').hidden=!pv;
+  renderSide();
+  if(pv) buildPreview(); else { setTimeout(()=>map.invalidateSize(),30); renderMap(); }
+  $('#btnBack').disabled=i===0; $('#btnNext').disabled=false;
+  $('#btnNext').textContent=i===4?'Print / Save PDF':'Next: '+STEPS[i+1];
+  $('#sideBody').scrollTop=0;
+}
+
+function field(key,label,type='text',extra=''){
+  const v=esc(S.meta[key]);
+  if(type==='textarea') return `<label class="f">${label}<textarea id="m_${key}" data-m="${key}" rows="3" ${extra}>${v}</textarea></label>`;
+  return `<label class="f">${label}<input id="m_${key}" data-m="${key}" type="${type}" value="${v}" ${extra}></label>`;
+}
+
+function renderSide(){
+  renderSteps();
+  const b=$('#sideBody');
+  if(step===0) b.innerHTML=sideSite();
+  if(step===1) b.innerHTML=sideLocations();
+  if(step===2) b.innerHTML=sideControls();
+  if(step===3) b.innerHTML=sideDetails();
+  if(step===4) b.innerHTML=sidePrint();
+  if(step===2) $$('.bl textarea',b).forEach(autosize);
+  $('#maptip').hidden = step>1 || !!draw;
+  $('#maptip').textContent = step===0?'Tip: search for the address, then draw the site boundary.':'Tip: click any symbol to select it. Drag points to move them.';
+}
+
+/* ---------- Step 1: Site ---------- */
+function sideSite(){
+  const ar=S.boundary?fmtArea(areaM2(S.boundary)):null;
+  return `<h2>Find and outline the site</h2>
+  <p class="hint">Search for the site, then draw the site boundary on the aerial map.</p>
+  <form id="searchForm" class="row" autocomplete="off">
+    <input class="inp" id="q" style="flex:1" placeholder="Address, suburb or “-37.81, 144.96”" aria-label="Search location">
+    <button class="btn pri" type="submit">Search</button>
+  </form>
+  <ul class="results" id="results" hidden></ul>
+  <div class="stack" style="margin-top:14px">
+    ${field('siteName','Site name')}
+    ${field('address','Site address')}
+  </div>
+  <h3>Site boundary</h3>
+  ${S.boundary?`<div class="note">Boundary drawn: <b>${ar}</b> · ${S.boundary.length} points</div>`:'<p class="hint">Click around the site perimeter. Click the first point or double-click to close it.</p>'}
+  <div class="row" style="margin-top:8px">
+    <button class="btn ${S.boundary?'':'pri'}" type="button" data-act="boundary">${S.boundary?'Redraw boundary':'Draw site boundary'}</button>
+    ${S.boundary?`<button class="btn" type="button" data-act="zoomSite">Zoom to site</button><button class="btn danger" type="button" data-act="clearBoundary">Clear</button>`:''}
+  </div>
+  <h3>Base map</h3>
+  <div class="row">
+    <div class="seg" role="radiogroup" aria-label="Base map">
+      <label><input type="radio" name="bm" value="aerial" ${S.basemap==='aerial'?'checked':''}>Aerial</label>
+      <label><input type="radio" name="bm" value="streets" ${S.basemap==='streets'?'checked':''}>Streets</label>
+    </div>
+    <label class="chk" ${S.basemap!=='aerial'?'hidden':''}><input type="checkbox" id="labels" ${S.labels?'checked':''}> Road and place labels</label>
+  </div>`;
+}
+/* ---------- Step 2: Locations ---------- */
+function sideLocations(){
+  const codes=codeMap();
+  const pal=g=>CATS.filter(c=>c.grp===g).map(c=>`<button type="button" class="pal${draw&&draw.kind===c.k?' on':''}" data-cat="${c.k}"><span class="sw">${swatchSvg(c,22)}</span><span>${esc(c.name)}<em>${c.geom==='point'?'Point':c.geom==='area'?'Area':c.geom==='arrow'?'Arrow':'Line'} · ${c.code}</em></span></button>`).join('');
+  const items=CATS.flatMap(c=>S.features.filter(f=>f.type===c.k)).map(f=>{
+    const c=CAT[f.type];
+    return `<div class="fitem${sel===f.id?' sel':''}" data-id="${f.id}">
+      <span class="sw">${swatchSvg(c,22)}</span><code>${esc(codes[f.id])}</code>
+      <input class="inp" id="fl_${f.id}" data-fl="label" value="${esc(f.label)}" placeholder="${esc(c.name.replace(/\s*\(.*\)$/,''))}" aria-label="Label for ${esc(codes[f.id])}">
+      <span class="acts">
+        <button class="icon-btn" type="button" data-fa="zoom" title="Zoom to" aria-label="Zoom to ${esc(codes[f.id])}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></svg></button>
+        ${c.geom!=='point'?`<button class="icon-btn" type="button" data-fa="redraw" title="Redraw" aria-label="Redraw ${esc(codes[f.id])}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>`:''}
+        <button class="icon-btn" type="button" data-fa="del" title="Delete" aria-label="Delete ${esc(codes[f.id])}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg></button>
+      </span>
+      <textarea class="inp" id="fn_${f.id}" data-fl="note" rows="1" placeholder="Note for the plan (optional)">${esc(f.note)}</textarea>
+    </div>`;
+  }).join('');
+  return `<h2>Mark locations of interest</h2>
+  <p class="hint">Pick a legend item, then click the map. Each location gets an ID (e.g. SK1) that the controls refer to.</p>
+  <div class="palette"><div class="pal-group">Template legend</div>${pal('t')}<div class="pal-group">Other as required</div>${pal('x')}</div>
+  <h3>Locations on this plan (${S.features.length})</h3>
+  ${S.features.length?`<div class="flist">${items}</div>`:'<div class="empty">Nothing marked yet. Choose “Spill kits”, then click the map where each one sits.</div>'}`;
+}
+/* ---------- Step 3: Controls ---------- */
+function sideControls(){
+  const secs=computeSections();
+  const card=x=>{
+    const {s,reasons,bullets,included,force}=x;
+    const tags = force===true&&!x.auto?'<span class="tag manual">Added manually</span>':(s.always?'<span class="tag always">Always included</span>':'')+reasons.map(r=>`<span class="tag">${esc(r)}</span>`).join('');
+    return `<div class="sec${included?'':' off'}" data-sec="${s.id}">
+      <div class="sec-head"><label class="switch" title="Include this section"><input type="checkbox" data-sx="inc" ${included?'checked':''} aria-label="Include ${esc(s.title)}"><span></span></label>
+        <div style="min-width:0"><h4>${esc(s.title)}</h4><div class="why">${tags}</div></div></div>
+      <div class="sec-body">
+        ${bullets.length?bullets.map(b=>`<div class="bl${b.on?'':' dis'}" data-k="${b.k}">
+          <input type="checkbox" data-sx="bon" ${b.on?'checked':''} aria-label="Include this control">
+          <textarea id="bt_${s.id}_${b.k}" data-sx="txt" rows="1">${esc(b.text)}</textarea>
+          ${b.custom?'<button class="edited" type="button" data-sx="rm">Remove</button>':b.edited?'<button class="edited" type="button" data-sx="reset" title="Restore the standard wording">Reset</button>':'<span></span>'}
+        </div>`).join(''):'<p class="hint" style="margin:4px 0">No controls yet for this section.</p>'}
+        <button class="btn sm ghost" type="button" data-sx="add">+ Add a control</button>
+      </div></div>`;
+  };
+  const inc=secs.filter(x=>x.included||x.force===false&&x.auto), na=secs.filter(x=>!(x.included||x.force===false&&x.auto));
+  return `<h2>Site activities and controls</h2>
+  <p class="hint">Controls are selected from the locations on your map and the activities below. Edit any wording, untick a control to leave it out, or add your own.</p>
+  <h3>Activities on this site</h3>
+  <div class="acts-grid">${ACTS.map(([k,l])=>`<label class="chk"><input type="checkbox" data-actk="${k}" ${S.activities[k]?'checked':''}>${esc(l)}</label>`).join('')}</div>
+  <h3>Control sections on the plan</h3>
+  ${inc.map(card).join('')}
+  ${na.length?`<details class="na"><summary>Not triggered for this site (${na.length})</summary><div style="margin-top:8px">${na.map(card).join('')}</div></details>`:''}`;
+}
+/* ---------- Step 4: Details ---------- */
+function sideDetails(){
+  return `<h2>Plan details</h2>
+  <p class="hint">These appear in the document header, the incident box and the site panel on page 1.</p>
+  <div class="stack">
+    ${field('siteName','Site name')}
+    ${field('project','Project / contract (optional)')}
+    <div class="grid2">${field('docRef','Document reference')}${field('version','Version')}</div>
+    ${field('appDate','Application date','date')}
+    <div class="grid2">${field('preparedBy','Prepared by')}${field('approvedBy','Approved by')}</div>
+    <div class="grid2">${field('ehsRep','EHS representative')}${field('ehsPhone','EHS phone','tel')}</div>
+    ${field('hours','Normal working hours','textarea','rows="3"')}
+  </div>
+  <h3>Environmental targets</h3>
+  <div class="stack">${field('tWaste','Waste','text','placeholder="e.g. ≥ 80% diverted from landfill"')}${field('tWater','Water','text','placeholder="e.g. 10% reduction on FY25 baseline"')}${field('tEnergy','Energy','text','placeholder="e.g. 5% reduction in kWh per FTE"')}</div>
+  <h3>Branding</h3>
+  <div class="stack">
+    ${field('orgName','Organisation name (shown if no logo)')}
+    <div class="row"><label class="btn" for="logoIn">${S.meta.logo?'Replace logo':'Upload logo'}</label><input type="file" id="logoIn" accept="image/*" hidden>
+      ${S.meta.logo?`<img src="${S.meta.logo}" alt="Logo preview" style="height:32px;max-width:120px;object-fit:contain;border:1px solid var(--line);border-radius:4px;padding:2px;background:#fff"><button class="btn sm danger" type="button" data-act="rmLogo">Remove</button>`:''}</div>
+    <label class="f" style="flex-direction:row;align-items:center;gap:10px">Header colour <input type="color" id="m_headerColor" data-m="headerColor" value="${esc(S.meta.headerColor)}" style="width:44px;height:30px;padding:0;border:1px solid var(--line);border-radius:4px"></label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:10px">Document border colour <input type="color" id="m_borderColor" data-m="borderColor" value="${esc(S.meta.borderColor||'#222222')}" style="width:44px;height:30px;padding:0;border:1px solid var(--line);border-radius:4px"><button class="btn sm ghost" type="button" data-act="resetBd">Reset</button></label>
+    <p class="hint" style="margin:0">Border colour applies to the control boxes, the header underline and the map/legend dividers. The targets box follows the header colour.</p>
+  </div>`;
+}
+/* ---------- Step 5: Print ---------- */
+function sidePrint(){
+  return `<h2>Preview and print</h2>
+  <p class="hint">Check the preview, then print. In the print dialog choose <b>Save as PDF</b> as the destination.</p>
+  <h3>Paper</h3>
+  <div class="seg" role="radiogroup" aria-label="Paper size">
+    <label><input type="radio" name="paper" value="A3" ${S.print.paper==='A3'?'checked':''}>A3 landscape</label>
+    <label><input type="radio" name="paper" value="A4" ${S.print.paper==='A4'?'checked':''}>A4 landscape</label>
+  </div>
+  <h3>Map framing</h3>
+  <p class="hint" style="margin-bottom:8px">The map fits the site boundary and all marked locations.</p>
+  <div class="row"><button class="btn" type="button" data-pz="-0.5">Zoom out</button><button class="btn" type="button" data-pz="0.5">Zoom in</button><button class="btn ghost" type="button" data-pz="0">Reset</button><span class="hint" style="margin:0">${S.print.zoomAdj?(S.print.zoomAdj>0?'+':'')+S.print.zoomAdj:''}</span></div>
+  <h3>Legend</h3>
+  <label class="chk"><input type="checkbox" id="fullLegend" ${S.print.fullLegend?'checked':''}> Show the full template legend, including items not on this map</label>
+  <h3>Print</h3>
+  <button class="btn pri" type="button" id="printBtn" data-act="print" style="width:100%;justify-content:center;padding:10px">Print / Save as PDF</button>
+  <p class="hint" style="margin-top:10px">If colours are missing, tick <b>Background graphics</b> under More settings. Set margins to <b>None</b>.</p>
+  <h3>Keep this plan</h3>
+  <p class="hint">Your work is saved in this browser automatically. Use <b>Save plan file</b> (top bar) to keep a copy you can reopen or hand to someone else.</p>`;
+}
+
+/* ---------- Sidebar events ---------- */
+const side=$('#sideBody');
+side.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.dataset.m){ S.meta[t.dataset.m]=t.value; persist(); renderSteps(); if(t.dataset.m==='docRef') updateChip(); return; }
+  if(t.dataset.fl){ const f=S.features.find(x=>x.id===t.closest('.fitem').dataset.id); if(f){ f[t.dataset.fl]=t.value; persist(); } return; }
+  if(t.dataset.sx==='txt'){
+    autosize(t);
+    const id=t.closest('.sec').dataset.sec, k=t.closest('.bl').dataset.k, st=secState(id);
+    const cu=(st.custom||[]).find(c=>c.id===k);
+    if(cu) cu.text=t.value; else { st.edit=st.edit||{}; st.edit[k]=t.value; }
+    persist();
+  }
+});
+side.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.name==='bm'){ S.basemap=t.value; setBase(); persist(); renderSide(); }
+  if(t.id==='labels'){ S.labels=t.checked; setBase(); persist(); }
+  if(t.dataset.actk){ S.activities[t.dataset.actk]=t.checked; persist(); renderSide(); }
+  if(t.dataset.sx==='inc'){ const x=computeSections().find(q=>q.s.id===t.closest('.sec').dataset.sec); const st=secState(x.s.id); st.force = t.checked===x.auto?undefined:t.checked; persist(); renderSide(); }
+  if(t.dataset.sx==='bon'){ const id=t.closest('.sec').dataset.sec,k=t.closest('.bl').dataset.k,st=secState(id); st.off=st.off||{}; if(t.checked) delete st.off[k]; else st.off[k]=true; t.closest('.bl').classList.toggle('dis',!t.checked); persist(); }
+  if(t.name==='paper'){ S.print.paper=t.value; persist(); buildPreview(); }
+  if(t.id==='fullLegend'){ S.print.fullLegend=t.checked; persist(); buildPreview(); }
+  if(t.id==='logoIn' && t.files[0]){
+    const r=new FileReader(); r.onload=()=>{ shrinkImage(r.result,600).then(u=>{ S.meta.logo=u; persist(); renderSide(); }); }; r.readAsDataURL(t.files[0]);
+  }
+  if(t.dataset.m==='headerColor'){ S.meta.headerColor=t.value; persist(); }
+});
+side.addEventListener('submit',e=>{ e.preventDefault(); if(e.target.id==='searchForm') search($('#q').value); });
+side.addEventListener('click',e=>{
+  const t=e.target.closest('button'); if(!t) return;
+  if(t.dataset.cat){ if(draw&&draw.kind===t.dataset.cat){ cancelDraw(); } else startDraw(t.dataset.cat); return; }
+  const act=t.dataset.act;
+  if(act==='boundary') { startDraw('boundary'); return; }
+  if(act==='clearBoundary'){ S.boundary=null; persist(); renderMap(); renderSide(); }
+  if(act==='zoomSite' && S.boundary) map.fitBounds(L.latLngBounds(S.boundary),{padding:[40,40]});
+  if(act==='resetBd'){ S.meta.borderColor='#222222'; persist(); renderSide(); }
+  if(act==='rmLogo'){ S.meta.logo=''; persist(); renderSide(); }
+  if(act==='print') doPrint();
+  if(t.dataset.fa){
+    const id=t.closest('.fitem').dataset.id, f=S.features.find(x=>x.id===id); if(!f) return;
+    if(t.dataset.fa==='zoom'){ selectFeature(id); if(f.coords.length===1) map.setView(f.coords[0],Math.max(map.getZoom(),18)); else map.fitBounds(L.latLngBounds(f.coords),{padding:[60,60],maxZoom:19}); }
+    if(t.dataset.fa==='del'){ S.features=S.features.filter(x=>x.id!==id); if(sel===id) sel=null; persist(); renderMap(); renderSide(); }
+    if(t.dataset.fa==='redraw'){ sel=id; startDraw(f.type,id); }
+  }
+  if(t.dataset.sx){
+    const id=t.closest('.sec').dataset.sec, st=secState(id);
+    if(t.dataset.sx==='add'){ st.custom=st.custom||[]; const cu={id:'c_'+uid(),text:''}; st.custom.push(cu); if(!computeSections().find(x=>x.s.id===id).included) st.force=true; persist(); renderSide(); const ta=$(`#bt_${id}_${cu.id}`); if(ta) ta.focus(); }
+    if(t.dataset.sx==='reset'){ const k=t.closest('.bl').dataset.k; if(st.edit) delete st.edit[k]; persist(); renderSide(); }
+    if(t.dataset.sx==='rm'){ const k=t.closest('.bl').dataset.k; st.custom=(st.custom||[]).filter(c=>c.id!==k); persist(); renderSide(); }
+  }
+  if(t.dataset.pz!=null){ const v=+t.dataset.pz; S.print.zoomAdj = v===0?0:Math.max(-4,Math.min(4,S.print.zoomAdj+v)); persist(); renderSide(); buildPreview(); }
+});
+side.addEventListener('focusin',e=>{ const fi=e.target.closest('.fitem'); if(fi&&sel!==fi.dataset.id){ sel=fi.dataset.id; $$('.fitem').forEach(el=>el.classList.toggle('sel',el===fi)); renderMap(); } });
+side.addEventListener('toggle',e=>{ if(e.target.tagName==='DETAILS'&&e.target.open) $$('.bl textarea',e.target).forEach(autosize); },true);
+function refreshPalette(){ $$('.pal').forEach(p=>p.classList.toggle('on',!!draw&&draw.kind===p.dataset.cat)); $('#maptip').hidden=step>1||!!draw; }
+function autosize(t){ t.style.height='auto'; t.style.height=t.scrollHeight+'px'; }
+function updateChip(){ $('#docChip').textContent=(S.meta.docRef||'ECP')+' · Environmental Control Plan'; }
+
+function shrinkImage(src,max){ return new Promise(res=>{ const im=new Image(); im.onload=()=>{ const s=Math.min(1,max/Math.max(im.width,im.height)); if(s===1&&src.length<300000){res(src);return;} const c=document.createElement('canvas'); c.width=Math.round(im.width*s); c.height=Math.round(im.height*s); c.getContext('2d').drawImage(im,0,0,c.width,c.height); res(c.toDataURL('image/png')); }; im.onerror=()=>res(src); im.src=src; }); }
+
+/* ---------- Search ---------- */
+async function search(q){
+  q=(q||'').trim(); const ul=$('#results'); if(!q) return;
+  const m=q.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+  if(m){ map.setView([+m[1],+m[2]],18); ul.hidden=true; return; }
+  ul.hidden=false; ul.innerHTML='<li><button type="button" disabled>Searching…</button></li>';
+  try{
+    const r=await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=au,nz&q='+encodeURIComponent(q),{headers:{'Accept-Language':'en-AU'}});
+    const js=await r.json();
+    if(!js.length){ ul.innerHTML='<li><button type="button" disabled>No matches in Australia or New Zealand. Try a suburb or street name.</button></li>'; return; }
+    ul.innerHTML=js.map((p,i)=>`<li><button type="button" data-i="${i}">${esc(p.display_name)}</button></li>`).join('');
+    ul.onclick=e=>{ const b=e.target.closest('[data-i]'); if(!b) return; const p=js[+b.dataset.i];
+      const bb=p.boundingbox?.map(Number);
+      if(bb) map.fitBounds([[bb[0],bb[2]],[bb[1],bb[3]]],{maxZoom:18}); else map.setView([+p.lat,+p.lon],18);
+      if(!S.meta.address.trim()){ S.meta.address=p.display_name.split(',').slice(0,4).join(',').trim(); const a=$('#m_address'); if(a) a.value=S.meta.address; persist(); }
+      ul.hidden=true; };
+  }catch(err){ ul.innerHTML='<li><button type="button" disabled>Search is unavailable right now. Pan and zoom the map, or enter coordinates like “-37.81, 144.96”.</button></li>'; }
+}
+
+/* =========================================================
+   Print preview
+   ========================================================= */
+let pmap=null, pReady=false, buildToken=0;
+const PAGE_MM={A3:[420,297],A4:[297,210]};
+
+function headerHTML(){
+  const m=S.meta, hc=esc(m.headerColor||'#d52b1e');
+  const logo=m.logo?`<img src="${m.logo}" alt="">`:(m.orgName.trim()?`<span class="org">${esc(m.orgName)}</span>`:'<span class="ph-ph screen-only">Add a logo in Details</span>');
+  return `<header class="ph"><div class="ph-logo">${logo}</div>
+    <div class="ph-title" style="background:${hc}"><h1>Environmental Control Plan</h1>${m.siteName.trim()?`<p>${esc(m.siteName)}${m.project.trim()?' · '+esc(m.project):''}</p>`:''}</div>
+    <div class="ph-ref" style="background:${hc}"><span>Document Reference:</span><b>${esc(m.docRef)}</b><span>Version ${esc(m.version)}</span></div>
+    <div class="ph-date" style="background:${hc}"><span>Application Date:</span><b>${esc(fmtDate(m.appDate))}</b></div></header>`;
+}
+function footerHTML(n,total){
+  return `<footer class="pf"><span>${esc(S.meta.docRef)} v${esc(S.meta.version)} · Printed copies are uncontrolled</span><span>Page ${n} of ${total}</span></footer>`;
+}
+function legendHTML(){
+  const codes=codeMap(), used=new Set(S.features.map(f=>f.type));
+  const cats=CATS.filter(c=>used.has(c.k)||(S.print.fullLegend&&c.grp==='t'&&c.k!=='other'));
+  let h='';
+  if(S.boundary) h+=`<div class="li"><span class="sw">${swatchSvg({k:'__boundary'})}</span><span>Site boundary</span></div>`;
+  for(const c of cats){
+    const ids=S.features.filter(f=>f.type===c.k).map(f=>esc(codes[f.id])+(f.label?.trim()?' '+esc(f.label.trim()):''));
+    const sep=S.features.some(f=>f.type===c.k&&f.label?.trim())?' · ':', ';
+    h+=`<div class="li"><span class="sw">${swatchSvg(c)}</span><span>${esc(c.name)}${ids.length&&c.geom!=='arrow'?`<small>${ids.join(sep)}</small>`:''}</span></div>`;
+  }
+  if(!cats.length&&!S.boundary) h+='<p class="disc">No locations marked yet.</p>';
+  const m=S.meta;
+  const rows=[['Site',m.siteName],['Address',m.address],['Site area',S.boundary?fmtArea(areaM2(S.boundary)):''],['Prepared by',m.preparedBy],['Approved by',m.approvedBy],['EHS contact',[m.ehsRep,m.ehsPhone].filter(s=>s.trim()).join(' – ')]].filter(r=>String(r[1]).trim());
+  return `<h2>Map Legend</h2>${h}
+    <dl class="sinfo">${rows.map(r=>`<dt>${r[0]}</dt><dd>${esc(r[1])}</dd>`).join('')}</dl>
+    <p class="disc">Locations are indicative. Confirm on site before works. Imagery date may not reflect current conditions.</p>`;
+}
+function controlsBoxes(){
+  return computeSections().filter(x=>x.included).map(x=>{
+    const items=x.bullets.filter(b=>b.on&&String(b.text).trim());
+    if(!items.length && !x.s.hl) return '';
+    return `<div class="cb${x.s.hl?' hl':''}"><h3>${esc(x.s.title)}</h3><ul>${items.map(b=>`<li class="${b.plain?'plain':''}">${esc(b.text)}</li>`).join('')}</ul></div>`;
+  }).filter(Boolean);
+}
+function pageShell(cls,inner,n,total){
+  const pc=S.print.paper.toLowerCase();
+  const cv=v=>/^#[0-9a-f]{3,8}$/i.test(v||'')?v:'';
+  return `<section class="page ${pc}" style="--bd:${cv(S.meta.borderColor)||'#222'};--hc:${cv(S.meta.headerColor)||'#d52b1e'}">${headerHTML()}<div class="pb ${cls}">${inner}</div>${footerHTML(n,total)}</section>`;
+}
+const northSVG=`<svg viewBox="0 0 40 56"><path d="M20 4 32 40 20 33 8 40z" fill="#111"/><path d="M20 4 20 33 8 40z" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="20" y="54" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="14" fill="#111">N</text></svg>`;
+
+async function buildPreview(){
+  const token=++buildToken;
+  document.getElementById('pageSize').textContent=`@page { size: ${S.print.paper} landscape; margin: 0; }`;
+  const pv=$('#preview');
+  pv.innerHTML=`<p class="pv-status" id="pvStatus">Loading map imagery…</p>`;
+  // Page 1
+  const p1=document.createElement('div'); p1.className='pv-holder';
+  p1.innerHTML=`<div class="pv-scale">${pageShell('p1',`<div class="pmap-wrap"><div class="pmap" id="pmap"></div><div class="north">${northSVG}</div></div><aside class="pleg">${legendHTML()}</aside>`,1,'<span class="tot">2</span>')}</div>`;
+  pv.appendChild(p1);
+  // Controls pages
+  try{ await document.fonts.ready; }catch(e){}
+  if(token!==buildToken) return;
+  const leg=p1.querySelector('.pleg'), u=S.print.paper==='A3'?1.4142:1;
+  for(let fs=7.4; fs>=5; fs-=0.2){ leg.style.fontSize=(fs*u).toFixed(2)+'pt'; if(leg.scrollHeight<=leg.clientHeight+1) break; }
+  const boxes=controlsBoxes();
+  const pages=layoutControls(pv,boxes);
+  const total=1+pages.length;
+  $$('.tot',pv).forEach(s=>s.textContent=total);
+  pages.forEach((el,i)=>{ el.querySelector('.pf span:last-child').textContent=`Page ${i+2} of ${total}`; });
+  scalePreview();
+  buildPrintMap(token);
+}
+function layoutControls(pv,boxes){
+  const mk=()=>{ const h=document.createElement('div'); h.className='pv-holder'; h.innerHTML=`<div class="pv-scale">${pageShell('p2','<div class="cols"></div>',2,2)}</div>`; pv.appendChild(h); return h; };
+  const over=el=>el.scrollWidth>el.clientWidth+2||el.scrollHeight>el.clientHeight+2;
+  let h=mk(), cols=h.querySelector('.cols');
+  cols.innerHTML=boxes.join('');
+  const u=S.print.paper==='A3'?1.4142:1;
+  for(let fs=9.5; fs>=6.6; fs-=0.2){ cols.style.fontSize=(fs*u).toFixed(2)+'pt'; if(!over(cols)) return [h]; }
+  // Doesn't fit on one page: paginate at a readable size.
+  cols.innerHTML=''; const fs=(7.6*u).toFixed(2)+'pt'; cols.style.fontSize=fs;
+  const out=[h];
+  for(const b of boxes){
+    cols.insertAdjacentHTML('beforeend',b);
+    if(over(cols) && cols.children.length>1){ cols.lastElementChild.remove(); h=mk(); cols=h.querySelector('.cols'); cols.style.fontSize=fs; cols.insertAdjacentHTML('beforeend',b); out.push(h); }
+  }
+  return out;
+}
+function scalePreview(){
+  const pv=$('#preview'); if(pv.hidden) return;
+  const [w,hh]=PAGE_MM[S.print.paper].map(mm=>mm*96/25.4);
+  const avail=Math.max(280,pv.clientWidth-40);
+  const s=Math.min(1,avail/w);
+  $$('.pv-holder',pv).forEach(h=>{ h.style.width=(w*s)+'px'; h.style.height=(hh*s)+'px'; h.querySelector('.pv-scale').style.transform=`scale(${s})`; });
+}
+window.addEventListener('resize',()=>{ if(step===4) scalePreview(); });
+
+function buildPrintMap(token){
+  if(pmap){ pmap.remove(); pmap=null; }
+  pReady=false; setPrintBtn();
+  const el=$('#pmap'); if(!el) return;
+  pmap=L.map(el,{zoomControl:false,attributionControl:true,dragging:false,scrollWheelZoom:false,doubleClickZoom:false,boxZoom:false,keyboard:false,touchZoom:false,zoomSnap:.25,fadeAnimation:false,zoomAnimation:false,markerZoomAnimation:false,inertia:false});
+  pmap.attributionControl.setPrefix(false);
+  L.control.scale({imperial:false,position:'bottomleft',maxWidth:200}).addTo(pmap);
+  const layers=baseLayers(), state=new Map();
+  const check=()=>{ if(token!==buildToken) return; if([...state.values()].every(Boolean)){ pReady=true; setPrintBtn(); } };
+  layers.forEach(l=>{ state.set(l,false); l.on('loading',()=>{state.set(l,false); pReady=false; setPrintBtn();}); l.on('load',()=>{state.set(l,true); check();}); l.addTo(pmap); });
+  const g=L.layerGroup().addTo(pmap);
+  const b=boundsAll();
+  if(b) pmap.fitBounds(b,{padding:[50,50],maxZoom:19}); else pmap.setView(S.view.center,S.view.zoom);
+  if(S.print.zoomAdj) pmap.setZoom(pmap.getZoom()+S.print.zoomAdj);
+  drawAll(g,{k:S.print.paper==='A3'?1.4:1});
+  setTimeout(()=>{ if(token===buildToken&&!pReady){ pReady=true; setPrintBtn('Some map tiles are slow to load. You can still print.'); } },12000);
+}
+function setPrintBtn(msg){
+  const st=$('#pvStatus'); const pb=$('#printBtn');
+  if(st) st.textContent = msg || (pReady?'Ready to print. Pages are shown at reduced size.':'Loading map imagery…');
+  if(pb){ pb.disabled=!pReady; }
+  if(step===4) $('#btnNext').disabled=!pReady;
+}
+function doPrint(){ if(step!==4){ go(4); return; } if(!pReady) return; window.print(); }
+window.addEventListener('afterprint',()=>{ if(step===4) $('#btnNext').disabled=!pReady; });
+
+/* =========================================================
+   Top bar: files
+   ========================================================= */
+$('#btnSave').onclick=()=>{
+  const blob=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  const nm=(S.meta.siteName.trim()||'site').replace(/[^\w-]+/g,'_');
+  a.download=`ECP_${nm}_${todayISO()}.json`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+};
+$('#btnOpen').onclick=()=>$('#fileOpen').click();
+$('#fileOpen').onchange=e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ const o=JSON.parse(r.result); if(!o||!o.meta||!Array.isArray(o.features)) throw 0; S=merge(DEFAULT(),o); afterLoad(); }catch(err){ alert('That file is not a plan saved from this tool.'); } };
+  r.readAsText(file); e.target.value='';
+};
+$('#btnNew').onclick=()=>{ if(!confirm('Start a new plan? Unsaved changes to the current plan will be lost.')) return; S=DEFAULT(); afterLoad(); };
+$('#btnExample').onclick=()=>{ if((S.features.length||S.boundary)&&!confirm('Replace the current plan with the example?')) return; S=example(); afterLoad(); };
+function afterLoad(){ sel=null; cancelDraw(true); persist(); setBase(); map.setView(S.view.center,S.view.zoom); const b=boundsAll(); if(b) map.fitBounds(b,{padding:[40,40]}); updateChip(); go(step===4?4:0); }
+
+function example(){
+  const s=DEFAULT(), c0=[-37.8305,144.7905];
+  const o=(dx,dy)=>[+(c0[0]+dy/111320).toFixed(7),+(c0[1]+dx/(111320*Math.cos(c0[0]*Math.PI/180))).toFixed(7)];
+  s.meta={...s.meta,siteName:'Example Rail Depot (sample data)',address:'Example Rd, Laverton North VIC',project:'Stabling yard upgrade',preparedBy:'Site EHS Manager',approvedBy:'Project Manager',ehsRep:'J. Citizen',ehsPhone:'0400 000 000',tWaste:'≥ 80% of construction waste diverted from landfill',tWater:'No uncontrolled discharges to stormwater',tEnergy:'Plant idling under 10 minutes',orgName:'Your Company'};
+  s.boundary=[o(-190,120),o(170,130),o(185,-115),o(-175,-125)];
+  const F=(type,coords,label='',note='')=>({id:uid(),type,label,note,coords});
+  s.features=[
+    F('receiver',[o(-260,170),o(-120,175),o(-125,240),o(-265,235)],'Residences – Example St'),
+    F('sensenv',[o(210,60),o(300,70),o(295,-80),o(205,-90)],'Creek reserve'),
+    F('waste',[o(-140,90)],'Main bin bay'),F('waste',[o(110,-80)],'Workshop skip'),
+    F('spillkit',[o(-60,40)],'Refuelling pad'),F('spillkit',[o(95,-50)],'Workshop'),
+    F('hazchem',[o(120,-95)],'Dangerous goods store','Flammables cabinet and 205 L drums on bunded pallets'),
+    F('refuel',[o(-70,15)],'Refuelling pad'),
+    F('drain',[o(-20,-60)]),F('drain',[o(150,0)]),
+    F('flow',[o(-100,60),o(-20,-50)]),F('flow',[o(100,30),o(170,5)]),
+    F('stockpile',[o(-160,-60),o(-110,-55),o(-115,-105),o(-165,-108)],'Spoil stockpile'),
+    F('erosion',[o(-170,-112),o(-105,-112)]),
+    F('gwwell',[o(40,100)],'MW-01'),
+  ];
+  s.activities={earthworks:true,refuel:true,chemicals:true,workshop:true};
+  s.view={center:c0,zoom:17};
+  return s;
+}
+
+/* =========================================================
+   Boot
+   ========================================================= */
+updateChip();
+renderMap();
+go(0);
+if(boundsAll()) map.fitBounds(boundsAll(),{padding:[40,40]});
+</script>
+</body>
+</html>
