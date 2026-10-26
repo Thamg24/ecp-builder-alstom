@@ -153,6 +153,7 @@ details.na summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--mut
 /* map symbols (editor + print) */
 .mk svg{display:block;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,.55))}
 .mk-id{position:absolute;left:25px;top:50%;transform:translateY(-50%);background:#fff;color:#111;font:600 10px/1 var(--f-mono);padding:2px 4px;border-radius:2px;border:1px solid rgba(0,0,0,.4);white-space:nowrap;pointer-events:none}
+.mk-lab span{position:absolute;left:0;top:0;background:#fff;color:#111;font:600 10px/1 var(--f-mono);padding:2px 4px;border-radius:2px;border:1px solid rgba(0,0,0,.4);white-space:nowrap}
 .mk.sel svg{outline:2.5px solid #fff;outline-offset:2px;border-radius:50%}
 .al span{position:absolute;left:0;top:0;transform:translate(-50%,-50%);background:#fff;color:#111;font:600 10.5px/1 var(--f-mono);padding:3px 5px;border-radius:2px;border:2px solid;white-space:nowrap}
 .al.sel span{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--accent)}
@@ -532,7 +533,7 @@ function swatchSvg(c, size=24){
 function bearingDeg(a,b){ const lat=(a[0]+b[0])/2*Math.PI/180; return -Math.atan2(b[0]-a[0],(b[1]-a[1])*Math.cos(lat))*180/Math.PI; }
 
 /* Draw boundary + features onto a Leaflet layer group. Shared by the editor and the print map. */
-function drawAll(group, {interactive=false, onPick=null, k=1}={}){
+function drawAll(group, {interactive=false, onPick=null, k=1, map=null, declutter=false}={}){
   group.clearLayers();
   if(S.boundary && S.boundary.length>2){
     L.polygon(S.boundary,{color:'#fff',weight:7*k,opacity:.9,fill:false,interactive:false}).addTo(group);
@@ -544,6 +545,7 @@ function drawAll(group, {interactive=false, onPick=null, k=1}={}){
   for(const f of list){
     const c=CAT[f.type], code=codes[f.id], isSel=interactive&&sel===f.id;
     const pick = onPick?(()=>onPick(f.id)):null;
+    if(c.geom==='point' && declutter && map) continue; // placed by placePoints() below
     if(c.geom==='point'){
       const m=L.marker(f.coords[0],{icon:L.divIcon({className:'mk'+(isSel?' sel':''),html:pointSvg(c,sz)+`<span class="mk-id" style="left:${sz+1}px;${lf}">${esc(code)}</span>`,iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]}),draggable:interactive,interactive,keyboard:false,title:interactive?(f.label||c.name):''}).addTo(group);
       if(interactive){ m.on('click',pick); m.on('dragend',e=>{const p=e.target.getLatLng(); f.coords=[[p.lat,p.lng]]; persist();}); }
@@ -566,6 +568,60 @@ function drawAll(group, {interactive=false, onPick=null, k=1}={}){
       const n=f.coords.length, a=f.coords[n-2], b=f.coords[n-1], deg=bearingDeg(a,b);
       L.marker(b,{icon:L.divIcon({className:'ah',html:`<svg width="${22*k}" height="${22*k}" viewBox="0 0 22 22" style="transform:rotate(${deg}deg);transform-origin:${19*k}px ${11*k}px"><path d="M2 2.5 19 11 2 19.5 6.5 11z" fill="${c.color}" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>`,iconSize:[22*k,22*k],iconAnchor:[19*k,11*k]}),interactive:false,keyboard:false}).addTo(group);
     }
+  }
+  if(declutter && map) placePoints(group,map,list,codes,k);
+}
+/* Print map: spread out icons that would overlap, with a leader line back to the true
+   location, and place each ID label where it doesn't cover another icon or label. */
+function placePoints(group,map,list,codes,k){
+  const sz=Math.round(24*k), fp=10.5*k, gap=3*k, minD=sz+gap;
+  const pts=list.filter(f=>CAT[f.type].geom==='point').map((f,i)=>{ const p=map.latLngToContainerPoint(f.coords[0]); return {f,c:CAT[f.type],code:codes[f.id],p,q:L.point(p.x,p.y),i}; });
+  // 1. Separate overlapping icons (simple relaxation; displacement only where needed)
+  for(let it=0; it<80; it++){
+    let moved=false;
+    for(let a=0;a<pts.length;a++) for(let b=a+1;b<pts.length;b++){
+      // icons are treated as squares: they overlap unless separated by minD on x or on y
+      const A=pts[a].q, B=pts[b].q; let dx=B.x-A.x, dy=B.y-A.y;
+      if(Math.abs(dx)>=minD || Math.abs(dy)>=minD) continue;
+      if(Math.abs(dx)<0.01 && Math.abs(dy)<0.01){ const ang=(a*2.399+b*1.13); dx=Math.cos(ang)*.01; dy=Math.sin(ang)*.01; }
+      // push apart along the axis that needs the smaller move, so icons stay close to their true spot
+      if(minD-Math.abs(dx) <= minD-Math.abs(dy)){ const m=(minD-Math.abs(dx))/2+0.2, s=Math.sign(dx)||1; A.x-=s*m; B.x+=s*m; }
+      else { const m=(minD-Math.abs(dy))/2+0.2, s=Math.sign(dy)||1; A.y-=s*m; B.y+=s*m; }
+      moved=true;
+    }
+    if(!moved) break;
+  }
+  // 2. Obstacles: icon boxes and area/line ID labels
+  const box=(x,y,w,h)=>({x1:x,y1:y,x2:x+w,y2:y+h});
+  const hit=(r,o)=>!(r.x2<=o.x1||r.x1>=o.x2||r.y2<=o.y1||r.y1>=o.y2);
+  const lw=t=>t.length*fp*0.62+10*k, lh=fp+7*k;
+  const obs=pts.map(o=>box(o.q.x-sz/2-1,o.q.y-sz/2-1,sz+2,sz+2));
+  list.filter(f=>['area','line'].includes(CAT[f.type].geom)).forEach(f=>{
+    const ll=CAT[f.type].geom==='area'?centroid(f.coords):f.coords[Math.floor((f.coords.length-1)/2)];
+    const c=map.latLngToContainerPoint(ll), w=lw(codes[f.id])+2*k, h=lh+2*k; obs.push(box(c.x-w/2,c.y-h/2,w,h));
+  });
+  // 3. Draw leader lines, icons and labels
+  for(const o of pts){
+    const dx=o.q.x-o.p.x, dy=o.q.y-o.p.y, moved=Math.hypot(dx,dy)>2;
+    const at=map.containerPointToLatLng(o.q);
+    if(moved){
+      L.polyline([o.f.coords[0],at],{color:'#fff',weight:3.2*k,opacity:.9,interactive:false}).addTo(group);
+      L.polyline([o.f.coords[0],at],{color:'#1a1a1a',weight:1.3*k,interactive:false}).addTo(group);
+      L.circleMarker(o.f.coords[0],{radius:2.6*k,color:'#fff',weight:1.2*k,fillColor:'#1a1a1a',fillOpacity:1,interactive:false}).addTo(group);
+    }
+    L.marker(at,{icon:L.divIcon({className:'mk',html:pointSvg(o.c,sz),iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]}),interactive:false,keyboard:false}).addTo(group);
+  }
+  const placed=[];
+  for(const o of pts){
+    const w=lw(o.code), h=lh, x=o.q.x, y=o.q.y, r=sz/2+2*k;
+    const cands=[[x+r,y-h/2],[x-r-w,y-h/2],[x-w/2,y-r-h],[x-w/2,y+r],[x+r*.75,y-r*.75-h],[x+r*.75,y+r*.75],[x-r*.75-w,y-r*.75-h],[x-r*.75-w,y+r*.75]];
+    let best=null, bestN=1e9;
+    for(const [cx,cy] of cands){
+      const b=box(cx,cy,w,h); const n=obs.filter(q=>hit(b,q)).length+placed.filter(q=>hit(b,q)).length*2;
+      if(n<bestN){ best=b; bestN=n; if(n===0) break; }
+    }
+    placed.push(best);
+    L.marker(map.containerPointToLatLng(L.point(best.x1,best.y1)),{icon:L.divIcon({className:'mk-lab',html:`<span style="font-size:${fp.toFixed(1)}px">${esc(o.code)}</span>`,iconSize:[0,0],iconAnchor:[0,0]}),interactive:false,keyboard:false,zIndexOffset:1000}).addTo(group);
   }
 }
 function boundsAll(){
@@ -1076,7 +1132,7 @@ function buildPrintMap(token){
   const b=boundsAll();
   if(b) pmap.fitBounds(b,{padding:[50,50],maxZoom:19}); else pmap.setView(S.view.center,S.view.zoom);
   if(S.print.zoomAdj) pmap.setZoom(pmap.getZoom()+S.print.zoomAdj);
-  drawAll(g,{k:S.print.paper==='A3'?1.4:1});
+  drawAll(g,{k:S.print.paper==='A3'?1.4:1, map:pmap, declutter:true});
   setTimeout(()=>{ if(token===buildToken&&!pReady){ pReady=true; setPrintBtn('Some map tiles are slow to load. You can still print.'); } },12000);
 }
 function setPrintBtn(msg){
