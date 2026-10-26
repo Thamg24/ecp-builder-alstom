@@ -820,7 +820,7 @@ function sideLocations(){
   }).join('');
   return `<h2>Mark locations of interest</h2>
   <p class="hint">Pick a legend item, then click the map. Each location gets an ID (e.g. SK1) that the controls refer to.</p>
-  <div class="palette"><div class="pal-group">Template legend</div>${pal('t')}<div class="pal-group">Other as required</div>${pal('x')}</div>
+  <div class="palette"><div class="pal-group">Environmental aspects</div>${pal('t')}${pal('x')}</div>
   <h3>Locations on this plan (${S.features.length})</h3>
   ${S.features.length?`<div class="flist">${items}</div>`:'<div class="empty">Nothing marked yet. Choose “Spill kits”, then click the map where each one sits.</div>'}`;
 }
@@ -882,7 +882,7 @@ function sidePrint(){
   <p class="hint" style="margin-bottom:8px">The map fits the site boundary and all marked locations.</p>
   <div class="row"><button class="btn" type="button" data-pz="-0.5">Zoom out</button><button class="btn" type="button" data-pz="0.5">Zoom in</button><button class="btn ghost" type="button" data-pz="0">Reset</button><span class="hint" style="margin:0">${S.print.zoomAdj?(S.print.zoomAdj>0?'+':'')+S.print.zoomAdj:''}</span></div>
   <h3>Legend</h3>
-  <label class="chk"><input type="checkbox" id="fullLegend" ${S.print.fullLegend?'checked':''}> Show the full template legend, including items not on this map</label>
+  <label class="chk"><input type="checkbox" id="fullLegend" ${S.print.fullLegend?'checked':''}> Show the standard legend items even if they are not on this map</label>
   <h3>Print</h3>
   <button class="btn pri" type="button" id="printBtn" data-act="print" style="width:100%;justify-content:center;padding:10px">Print / Save as PDF</button>
   <p class="hint" style="margin-top:10px">If colours are missing, tick <b>Background graphics</b> under More settings. Set margins to <b>None</b>.</p>
