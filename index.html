@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Site ECP Builder</title>
+<title>Alstom Site ECP Builder</title>
 <meta name="description" content="Build a two-page site Environmental Control Plan: map the site, mark key locations, auto-select applicable controls and print to PDF.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,16 +13,19 @@
 <style>
 /* Layout: top bar, then a working sidebar (steps) beside a full-bleed map stage; step 5 swaps the map for paper previews. */
 :root{
-  --paper:#f2f4f1;      /* app ground, faint eucalyptus tint */
+  /* Alstom brand palette (Brand cheat sheet: colours) — fixed */
+  --paper:#f2f2f7;      /* Limestone grey #e6e6f0, lightened for the app ground */
   --panel:#ffffff;
-  --ink:#16211c;
-  --muted:#5a6862;
-  --line:#d6ddd8;
-  --accent:#1c5a44;     /* eucalyptus */
+  --ink:#1e3246;        /* Carbon blue */
+  --muted:#4b5a69;      /* Carbon blue shade */
+  --line:#cdcddc;       /* Limestone grey shade */
+  --accent:#1e3246;     /* Carbon blue */
+  --accent-hover:#142846; /* Blueprint blue */
+  --focus:#2850f0;      /* Dynamic ultramarine */
   --accent-ink:#ffffff;
-  --accent-soft:#e1eee8;
-  --doc-red:#d52b1e;    /* document header red (template) */
-  --warn:#9f2a1d;
+  --accent-soft:#e6e6f0;/* Limestone grey */
+  --doc-red:#dc3223;    /* Vibrant red */
+  --warn:#dc3223;
   --f-display:'Archivo','Arial Narrow',Arial,sans-serif;
   --f-body:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
   --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
@@ -32,18 +35,18 @@
 html,body{height:100%;margin:0}
 body{background:var(--paper);color:var(--ink);font:14px/1.45 var(--f-body);-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 [hidden]{display:none!important}
 
 #app{display:grid;grid-template-rows:auto 1fr;height:100%}
-.topbar{display:flex;align-items:center;gap:16px;padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));background:var(--ink);color:#eef3f0;flex-wrap:wrap}
+.topbar{display:flex;align-items:center;gap:16px;padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));background:#fff;color:var(--ink);border-bottom:1px solid var(--line);flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:10px;margin-right:auto}
-.brand-mark{width:28px;height:28px;border-radius:6px;background:var(--doc-red);display:grid;place-items:center}
+.brand-logo{height:34px;width:auto;display:block}.brand-logo svg{height:100%;width:auto;display:block}.brand-sep{width:1px;height:30px;background:var(--line)}
 .brand h1{font:700 18px/1 var(--f-display);font-stretch:85%;letter-spacing:.01em;margin:0}
-.brand small{display:block;font:500 11px/1.2 var(--f-mono);color:#a9bbb2;margin-top:3px;letter-spacing:.04em}
+.brand small{display:block;font:500 11px/1.2 var(--f-mono);color:var(--muted);margin-top:3px;letter-spacing:.04em}
 .tb-actions{display:flex;gap:6px;flex-wrap:wrap}
-.tb-btn{background:transparent;border:1px solid #3b4b44;color:#eef3f0;border-radius:6px;padding:6px 11px;cursor:pointer;font-size:13px}
-.tb-btn:hover{background:#24332c}
+.tb-btn{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:6px 11px;cursor:pointer;font-size:13px}
+.tb-btn:hover{background:var(--accent-soft)}
 
 main{display:grid;grid-template-columns:400px 1fr;min-height:0}
 main.wide{grid-template-columns:540px 1fr}
@@ -54,27 +57,27 @@ main.wide{grid-template-columns:540px 1fr}
 .step.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
 .step.done b{background:var(--accent);border-color:var(--accent);color:#fff}
 .side-body{flex:1;overflow:auto;padding:18px 18px 24px}
-.side-foot{display:flex;justify-content:space-between;gap:8px;padding:10px 18px;border-top:1px solid var(--line);background:#fafbfa}
+.side-foot{display:flex;justify-content:space-between;gap:8px;padding:10px 18px;border-top:1px solid var(--line);background:#f7f7fa}
 .side h2{font:700 21px/1.15 var(--f-display);font-stretch:90%;margin:0 0 4px;text-wrap:balance}
 .side h3{font:700 12px/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:22px 0 8px}
 .hint{color:var(--muted);margin:0 0 14px;font-size:13px}
 .stack{display:flex;flex-direction:column;gap:10px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:#33413a}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--ink)}
 label.f input,label.f textarea,label.f select,.inp{border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:#fff;font-weight:400;font-size:14px;width:100%;min-width:0}
 textarea{resize:vertical}
 .btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:7px 12px;cursor:pointer;font-weight:600;font-size:13px;display:inline-flex;align-items:center;gap:6px}
-.btn:hover{border-color:#aab8b1}
+.btn:hover{border-color:#afafc8}
 .btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
-.btn.pri:hover{background:#164a38}
+.btn.pri:hover{background:var(--accent-hover)}
 .btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
 .btn.danger{color:var(--warn)}
 .btn:disabled{opacity:.5;cursor:default}
 .btn.sm{padding:4px 8px;font-size:12px}
 .chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer;padding:3px 0}
 .chk input{margin-top:3px;accent-color:var(--accent)}
-.note{background:var(--accent-soft);border-radius:6px;padding:9px 11px;font-size:13px;color:#21453a}
+.note{background:var(--accent-soft);border-radius:6px;padding:9px 11px;font-size:13px;color:var(--ink)}
 
 .results{list-style:none;margin:6px 0 0;padding:0;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .results li button{width:100%;text-align:left;border:0;background:#fff;padding:8px 10px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--line)}
@@ -89,7 +92,7 @@ textarea{resize:vertical}
 /* palette */
 .palette{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .pal{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 8px;cursor:pointer;text-align:left;font-size:12.5px;line-height:1.25;min-height:42px}
-.pal:hover{border-color:#9fb0a8}
+.pal:hover{border-color:#afafc8}
 .pal.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--accent-soft)}
 .pal .sw{flex:none;width:24px;height:24px;display:grid;place-items:center}
 .pal em{font-style:normal;font:500 10px var(--f-mono);color:var(--muted);display:block}
@@ -110,26 +113,26 @@ textarea{resize:vertical}
 /* controls */
 .acts-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px}
 .sec{border:1px solid var(--line);border-radius:8px;background:#fff;margin-bottom:10px;overflow:hidden}
-.sec.off{background:#f7f8f7}
+.sec.off{background:#f7f7fa}
 .sec.off .sec-body{display:none}
 .sec-head{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid var(--line)}
 .sec.off .sec-head{border-bottom:0}
 .sec-head h4{margin:0;font:700 15px/1.2 var(--f-display);font-stretch:92%}
 .why{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
-.tag{font-size:11px;line-height:1;padding:4px 6px;border-radius:999px;background:var(--accent-soft);color:#21453a;white-space:nowrap}
-.tag.always{background:#eceeed;color:#4b5752}
-.tag.manual{background:#fde9e5;color:#8a2a1c}
+.tag{font-size:11px;line-height:1;padding:4px 6px;border-radius:999px;background:var(--accent-soft);color:var(--ink);white-space:nowrap}
+.tag.always{background:#e6e6f0;color:var(--muted)}
+.tag.manual{background:#fbe3e1;color:#dc3223}
 .sec-body{padding:8px 12px 10px}
 .bl{display:grid;grid-template-columns:18px 1fr auto;gap:6px;align-items:start;padding:3px 0}
 .bl input[type=checkbox]{margin-top:7px;accent-color:var(--accent)}
 .bl textarea{border:1px solid transparent;border-radius:5px;padding:4px 6px;font-size:13px;line-height:1.4;resize:none;overflow:hidden;width:100%;background:transparent}
 .bl textarea:hover{border-color:var(--line)}
 .bl textarea:focus{border-color:var(--accent);background:#fff;outline:none}
-.bl.dis textarea{color:#9aa5a0;text-decoration:line-through}
+.bl.dis textarea{color:#788291;text-decoration:line-through}
 .bl .edited{font-size:10.5px;color:var(--accent);border:0;background:none;cursor:pointer;padding:6px 2px;text-decoration:underline}
 .switch{position:relative;width:34px;height:20px;flex:none;margin-top:1px}
 .switch input{opacity:0;width:100%;height:100%;margin:0;position:absolute;cursor:pointer;z-index:1}
-.switch span{position:absolute;inset:0;background:#c5cec9;border-radius:999px;transition:.15s}
+.switch span{position:absolute;inset:0;background:#cdcddc;border-radius:999px;transition:.15s}
 .switch span::after{content:"";position:absolute;width:14px;height:14px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
 .switch input:checked+span{background:var(--accent)}
 .switch input:checked+span::after{left:17px}
@@ -139,12 +142,12 @@ details.na summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--mut
 
 /* stage */
 .stage{position:relative;min-width:0;min-height:0}
-#map{position:absolute;inset:0;background:#cfd8d3}
+#map{position:absolute;inset:0;background:#cdcddc}
 #map.drawing{cursor:crosshair}
 #map.drawing .leaflet-interactive{cursor:crosshair}
 .drawbar{position:absolute;z-index:800;top:12px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;border-radius:8px;padding:8px 10px 8px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:calc(100% - 24px);flex-wrap:wrap;font-size:13px}
 .drawbar .btn{padding:4px 10px;font-size:12px}
-.drawbar .btn.ghost{color:#c7d3cd}
+.drawbar .btn.ghost{color:#cdcddc}
 .maptip{position:absolute;z-index:700;left:12px;bottom:28px;background:rgba(255,255,255,.94);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--muted);box-shadow:0 1px 4px rgba(0,0,0,.2)}
 
 /* map symbols (editor + print) */
@@ -158,10 +161,10 @@ details.na summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--mut
 .vx.first{background:var(--doc-red);border-color:#fff}
 
 /* preview */
-#preview{position:absolute;inset:0;overflow:auto;background:#d9dfdb;padding:24px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
-.pv-holder{margin:0 auto 24px;position:relative;box-shadow:0 4px 18px rgba(20,35,28,.25)}
+#preview{position:absolute;inset:0;overflow:auto;background:#cdcddc;padding:24px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+.pv-holder{margin:0 auto 24px;position:relative;box-shadow:0 4px 18px rgba(20,40,70,.25)}
 .pv-scale{transform-origin:0 0;position:absolute;left:0;top:0}
-.pv-status{max-width:720px;margin:0 auto 14px;font-size:13px;color:#33413a;text-align:center}
+.pv-status{max-width:720px;margin:0 auto 14px;font-size:13px;color:var(--ink);text-align:center}
 
 /* ---------- printed document ---------- */
 .page{--u:1;background:#fff;color:#111;display:flex;flex-direction:column;overflow:hidden;font-family:var(--f-body);-webkit-print-color-adjust:exact;print-color-adjust:exact;position:relative}
@@ -170,9 +173,7 @@ details.na summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--mut
 .ph{display:grid;grid-template-columns:calc(var(--u)*44mm) 1fr calc(var(--u)*40mm) calc(var(--u)*26mm);height:calc(var(--u)*17mm);border-bottom:calc(var(--u)*.5mm) solid var(--bd,#111);flex:none}
 .ph>div{display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:0 calc(var(--u)*2mm);border-left:calc(var(--u)*.4mm) solid #fff}
 .ph-logo{background:#fff;border-left:0!important}
-.ph-logo img{max-height:calc(var(--u)*13mm);max-width:100%;object-fit:contain}
-.ph-logo .org{font:800 calc(var(--u)*13pt)/1.05 var(--f-display);font-stretch:90%;color:#111}
-.ph-logo .ph-ph{font-size:calc(var(--u)*7pt);color:#9aa;border:1px dashed #ccc;padding:2mm 3mm}
+.ph-logo svg{height:calc(var(--u)*15mm);width:100%;display:block}
 .ph-title{color:#fff}
 .ph-title h1{margin:0;font:800 calc(var(--u)*22pt)/1 var(--f-display);font-stretch:95%;letter-spacing:.005em}
 .ph-title p{margin:calc(var(--u)*1mm) 0 0;font:600 calc(var(--u)*8.5pt)/1.1 var(--f-body);opacity:.95}
@@ -235,7 +236,7 @@ details.na summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--mut
 <div id="app">
   <header class="topbar">
     <div class="brand">
-      <div class="brand-mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></div>
+      <div class="brand-logo"><svg role="img" aria-label="Alstom" preserveAspectRatio="xMidYMid meet" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 329.832 90.954" enable-background="new 0 0 329.832 90.954" xml:space="preserve"> <g> <rect fill="none" width="329.832" height="90.954"/> <g> <g> <path fill="#DC3223" d="M250.891,31.493l-2.798,2.97c4.517,7.097,5.144,16.161,0.952,23.733l1.533-0.026 C255.788,49.715,255.71,39.556,250.891,31.493z M238.625,33.199l1.52-1.6c-7.59-7.025-20.177-6.867-27.506,0.666 c-4.367,4.483-6.427,10.485-5.434,16.14l1.527-0.047c0.087-7.89,6.538-14.389,14.675-14.57 c8.314-0.229,15.218,6.142,15.394,14.252c0.223,8.131-6.3,14.85-14.606,15.072c-4.174,0.102-7.955-1.441-10.746-4.001 l-2.159,2.215c-9.611-8.874-9.979-23.694-0.892-33.029c7.334-7.545,18.562-9.264,27.651-5.06l0.119,0.134l1.168-1.302 c-11.564-6.719-26.828-4.807-36.562,5.194c-11.502,11.788-10.973,30.411,1.13,41.594l2.183-2.224 c4.78,4.38,10.334,6.573,16.817,6.39c13.078-0.346,23.406-10.941,23.076-23.671C245.811,42.956,243.007,37.239,238.625,33.199z" /> <path fill="#1E3246" d="M89.217,23.185H78.221V67.77h31.147v-8.66h-20.15V23.185z M40.252,23.185L23.185,67.77h10.646 c1.938-6.624,10.381-11.63,18.242-12.328l-1.62-4.035c-3.306-0.434-8.164,0.096-11.11,1.373l7.195-18.863L60.482,67.77H71.11 L52.747,23.185H40.252z M151.013,31.814h14.654V67.77h11.267V31.814h14.726v-8.63h-40.646V31.814z M296.861,23.185L283.986,40.13 l-12.688-16.945h-9.885V67.77h11.265V40.528l10.551,14.41h1.607l10.533-14.41V67.77h11.279V23.185H296.861z M123.995,34.623 c0-3.583,8.13-6.704,20.81-2.149l0.737-8.803c-2.007-0.886-7.694-2.373-12.028-2.373c-9.237,0-19.708,3.401-19.708,14.481 c0,16.612,24.791,10.929,24.083,19.996c-0.276,3.52-5.524,4.375-9.957,4.375c-5.039,0-9.569-1.004-12.635-2.461l-1.052,9.564 c4.091,1.32,9.406,1.971,13.687,1.971c10.218,0,20.198-3.22,20.24-15.138C148.191,38.161,123.995,42.795,123.995,34.623z"/> </g> </g> </g> </svg></div><div class="brand-sep" aria-hidden="true"></div>
       <div><h1>Site ECP Builder</h1><small id="docChip">EHS-AUS-FRM-181 · Environmental Control Plan</small></div>
     </div>
     <div class="tb-actions">
@@ -269,33 +270,40 @@ details.na summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--mut
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 'use strict';
+/* Alstom brand: fixed, not user-editable */
+const ALSTOM_LOGO=`<svg role="img" aria-label="Alstom" preserveAspectRatio="xMidYMid meet" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 329.832 90.954" enable-background="new 0 0 329.832 90.954" xml:space="preserve"> <g> <rect fill="none" width="329.832" height="90.954"/> <g> <g> <path fill="#DC3223" d="M250.891,31.493l-2.798,2.97c4.517,7.097,5.144,16.161,0.952,23.733l1.533-0.026 C255.788,49.715,255.71,39.556,250.891,31.493z M238.625,33.199l1.52-1.6c-7.59-7.025-20.177-6.867-27.506,0.666 c-4.367,4.483-6.427,10.485-5.434,16.14l1.527-0.047c0.087-7.89,6.538-14.389,14.675-14.57 c8.314-0.229,15.218,6.142,15.394,14.252c0.223,8.131-6.3,14.85-14.606,15.072c-4.174,0.102-7.955-1.441-10.746-4.001 l-2.159,2.215c-9.611-8.874-9.979-23.694-0.892-33.029c7.334-7.545,18.562-9.264,27.651-5.06l0.119,0.134l1.168-1.302 c-11.564-6.719-26.828-4.807-36.562,5.194c-11.502,11.788-10.973,30.411,1.13,41.594l2.183-2.224 c4.78,4.38,10.334,6.573,16.817,6.39c13.078-0.346,23.406-10.941,23.076-23.671C245.811,42.956,243.007,37.239,238.625,33.199z" /> <path fill="#1E3246" d="M89.217,23.185H78.221V67.77h31.147v-8.66h-20.15V23.185z M40.252,23.185L23.185,67.77h10.646 c1.938-6.624,10.381-11.63,18.242-12.328l-1.62-4.035c-3.306-0.434-8.164,0.096-11.11,1.373l7.195-18.863L60.482,67.77H71.11 L52.747,23.185H40.252z M151.013,31.814h14.654V67.77h11.267V31.814h14.726v-8.63h-40.646V31.814z M296.861,23.185L283.986,40.13 l-12.688-16.945h-9.885V67.77h11.265V40.528l10.551,14.41h1.607l10.533-14.41V67.77h11.279V23.185H296.861z M123.995,34.623 c0-3.583,8.13-6.704,20.81-2.149l0.737-8.803c-2.007-0.886-7.694-2.373-12.028-2.373c-9.237,0-19.708,3.401-19.708,14.481 c0,16.612,24.791,10.929,24.083,19.996c-0.276,3.52-5.524,4.375-9.957,4.375c-5.039,0-9.569-1.004-12.635-2.461l-1.052,9.564 c4.091,1.32,9.406,1.971,13.687,1.971c10.218,0,20.198-3.22,20.24-15.138C148.191,38.161,123.995,42.795,123.995,34.623z"/> </g> </g> </g> </svg>`;
+const BRAND={header:'#dc3223' /* Vibrant red */, border:'#1e3246' /* Carbon blue */, boundary:'#dc3223'};
 /* =========================================================
    Reference data
    ========================================================= */
 const CATS = [
   // From the EHS-AUS-FRM-181 map legend
   {k:'receiver', name:'Sensitive receivers (residents)', geom:'area', code:'SR', color:'#d9b800', fill:'#f7e36b', fo:.45, grp:'t'},
-  {k:'sensenv',  name:'Sensitive environment (parkland)', geom:'area', code:'SE', color:'#3d8a45', fill:'#a8e0a8', fo:.45, grp:'t'},
-  {k:'waste',    name:'Waste management locations (bins)', geom:'point', code:'W', color:'#2e7d32', shape:'square', glyph:'bin', grp:'t'},
+  {k:'sensenv',  name:'Sensitive environment (parkland)', geom:'area', code:'SE', color:'#4f9a46', fill:'#afdcaa', fo:.5, grp:'t'},
+  {k:'wasteGen', name:'General waste bins (landfill)', geom:'point', code:'WG', color:'#4b5a69', shape:'square', glyph:'bin', grp:'t'},
+  {k:'wasteRec', name:'Recycling bins', geom:'point', code:'WR', color:'#78c86e', ink:'#1e3246', shape:'square', glyph:'recycle', grp:'t'},
+  {k:'wasteCon', name:'Contaminated waste bins', geom:'point', code:'WC', color:'#dc3223', shape:'square', glyph:'binx', grp:'t'},
   {k:'spillkit', name:'Spill kits', geom:'point', code:'SK', color:'#f5c400', ink:'#1a1a1a', shape:'triangle', glyph:'excl', grp:'t'},
-  {k:'hazchem',  name:'Hazardous chemical storage', geom:'point', code:'HC', color:'#e53935', shape:'square', glyph:'diamond', grp:'t'},
-  {k:'contam',   name:'Contaminated soil', geom:'area', code:'CS', color:'#6d4019', fill:'#b07a45', fo:.5, dash:'5 4', grp:'t'},
-  {k:'drain',    name:'Stormwater drains', geom:'point', code:'SD', color:'#173a85', shape:'square', glyph:'grate', grp:'t'},
-  {k:'potable',  name:'Potable water monitoring location', geom:'point', code:'PW', color:'#0277bd', shape:'circle', glyph:'target', grp:'t'},
-  {k:'gwwell',   name:'Groundwater monitoring wells', geom:'point', code:'GW', color:'#00695c', shape:'circle', glyph:'well', grp:'t'},
-  {k:'flow',     name:'Stormwater flow direction', geom:'arrow', code:'FD', color:'#1e88e5', grp:'t'},
+  {k:'hazchem',  name:'Hazardous chemical storage', geom:'point', code:'HC', color:'#dc3223', shape:'square', glyph:'diamond', grp:'t'},
+  {k:'contam',   name:'Contaminated soil', geom:'area', code:'CS', color:'#9b875f', fill:'#afa082', fo:.55, dash:'5 4', grp:'t'},
+  {k:'drain',    name:'Stormwater drains', geom:'point', code:'SD', color:'#142846', shape:'square', glyph:'grate', grp:'t'},
+  {k:'potable',  name:'Potable water monitoring location', geom:'point', code:'PW', color:'#2850f0', shape:'circle', glyph:'target', grp:'t'},
+  {k:'gwwell',   name:'Groundwater monitoring wells', geom:'point', code:'GW', color:'#415569', shape:'circle', glyph:'well', grp:'t'},
+  {k:'flow',     name:'Stormwater flow direction', geom:'arrow', code:'FD', color:'#2850f0', grp:'t'},
   // Additional "other as required"
-  {k:'refuel',   name:'Refuelling / plant maintenance area', geom:'point', code:'RF', color:'#ef6c00', shape:'circle', glyph:'pump', grp:'x'},
-  {k:'washdown', name:'Plant wash-down bay', geom:'point', code:'WD', color:'#00838f', shape:'circle', glyph:'waves', grp:'x'},
-  {k:'concrete', name:'Concrete washout', geom:'point', code:'CW', color:'#6b6b6b', shape:'circle', glyph:'cw', grp:'x'},
-  {k:'stockpile',name:'Stockpile', geom:'area', code:'SP', color:'#94652f', fill:'#dcb47e', fo:.55, grp:'x'},
-  {k:'erosion',  name:'Sediment fence / erosion control', geom:'line', code:'ES', color:'#8d5524', dash:'9 5', grp:'x'},
-  {k:'waterway', name:'Waterway / wetland', geom:'area', code:'WW', color:'#2b7bd0', fill:'#7cc0f2', fo:.45, grp:'x'},
-  {k:'nogo',     name:'No-go zone (protected vegetation / fauna)', geom:'area', code:'NG', color:'#c62828', fill:'#ef9a9a', fo:.3, dash:'7 4', grp:'x'},
-  {k:'heritage', name:'Heritage site', geom:'area', code:'HS', color:'#7b4fa8', fill:'#c9b1e6', fo:.4, grp:'x'},
-  {k:'compound', name:'Site compound / laydown', geom:'area', code:'SC', color:'#56616b', fill:'#b8c1c9', fo:.4, grp:'x'},
-  {k:'monitor',  name:'Noise / dust monitoring location', geom:'point', code:'MP', color:'#6a1b9a', shape:'circle', glyph:'bars', grp:'x'},
-  {k:'other',    name:'Other (as required)', geom:'point', code:'OT', color:'#37474f', shape:'circle', glyph:'plus', grp:'x'},
+  {k:'refuel',   name:'Refuelling / plant maintenance area', geom:'point', code:'RF', color:'#e15a50', shape:'circle', glyph:'pump', grp:'x'},
+  {k:'washdown', name:'Plant wash-down bay', geom:'point', code:'WD', color:'#5573f5', shape:'circle', glyph:'waves', grp:'x'},
+  {k:'concrete', name:'Concrete washout', geom:'point', code:'CW', color:'#788291', shape:'circle', glyph:'cw', grp:'x'},
+  {k:'stockpile',name:'Stockpile', geom:'area', code:'SP', color:'#9b875f', fill:'#c3b9a0', fo:.6, grp:'x'},
+  {k:'erosion',  name:'Sediment fence / erosion control', geom:'line', code:'ES', color:'#9b875f', dash:'9 5', grp:'x'},
+  {k:'waterway', name:'Waterway / wetland', geom:'area', code:'WW', color:'#2850f0', fill:'#7d96f5', fo:.45, grp:'x'},
+  {k:'nogo',     name:'No-go zone (protected vegetation / fauna)', geom:'area', code:'NG', color:'#dc3223', fill:'#eb827d', fo:.3, dash:'7 4', grp:'x'},
+  {k:'heritage', name:'Heritage site', geom:'area', code:'HS', color:'#9646dc', fill:'#be91eb', fo:.4, grp:'x'},
+  {k:'compound', name:'Site compound / laydown', geom:'area', code:'SC', color:'#4b5a69', fill:'#cdcddc', fo:.45, grp:'x'},
+  {k:'monitor',  name:'Noise / dust monitoring location', geom:'point', code:'MP', color:'#9646dc', shape:'circle', glyph:'bars', grp:'x'},
+  {k:'energyEq', name:'High energy-consuming equipment', geom:'point', code:'HE', color:'#9b875f', shape:'diamond', glyph:'bolt', grp:'x'},
+  {k:'waterEq',  name:'High water-consuming equipment', geom:'point', code:'HW', color:'#2850f0', shape:'diamond', glyph:'drop', grp:'x'},
+  {k:'other',    name:'Other (as required)', geom:'point', code:'OT', color:'#1e3246', shape:'circle', glyph:'plus', grp:'x'},
 ];
 const CAT = Object.fromEntries(CATS.map(c=>[c.k,c]));
 
@@ -398,26 +406,32 @@ const SECTIONS = [
     {k:'aq8', when:c=>c.f('monitor'), t:c=>`Noise and dust monitoring locations: ${c.codes('monitor')}.`},
     {k:'aq9', when:c=>c.f('receiver')||c.a('nightworks'), t:'Use broadband (non-tonal) reversing alarms on plant where possible.'},
   ]},
-  {id:'waste', title:'Waste', always:true, trig:[F('waste'),F('hazchem'),F('refuel'),A('workshop'),A('demolition')], bullets:[
+  {id:'waste', title:'Waste', always:true, trig:[F('wasteGen'),F('wasteRec'),F('wasteCon'),F('hazchem'),F('refuel'),A('workshop'),A('demolition')], bullets:[
     {k:'w1', t:'Segregate waste: hazardous / non-hazardous, and recyclable / landfill.'},
     {k:'w2', t:'Use the right bin for each waste type. Do not contaminate recycling bins.'},
     {k:'w3', t:'Waste must be transported by an approved, licensed transporter.'},
     {k:'w4', t:'Provide appropriate waste bins (general, recycling and contaminated).'},
-    {k:'w5', when:c=>c.f('waste'), t:c=>`Waste bins are located at ${c.codes('waste')} (see map).`},
+    {k:'w5', when:c=>c.f('wasteGen')||c.f('wasteRec')||c.f('wasteCon'), t:c=>'Waste bins (see map): '+[['wasteGen','general'],['wasteRec','recycling'],['wasteCon','contaminated']].filter(([k])=>c.f(k)).map(([k,l])=>`${l} ${c.codes(k)}`).join('; ')+'.'},
+    {k:'w5r', when:c=>c.f('wasteRec'), t:c=>`Keep recycling bins (${c.codes('wasteRec')}) free of food scraps, general waste and contaminated items.`},
+    {k:'w5c', when:c=>c.f('wasteCon'), t:c=>`Put oily rags, used absorbents, spill clean-up material and chemical-contaminated items only in contaminated waste bins (${c.codes('wasteCon')}). Keep lids closed.`},
     {k:'w6', when:c=>c.f('hazchem')||c.f('refuel')||c.a('workshop')||c.a('chemicals')||c.a('painting'), t:'Store hazardous waste (e.g. oils, oily rags, chemical containers) in labelled, bunded containers for removal by a licensed contractor.'},
     {k:'w7', when:c=>c.a('demolition'), t:'Check for asbestos and other hazardous materials before demolition, and handle them according to the hazardous materials survey.'},
     {k:'w8', t:'Keep waste dockets and disposal certificates for monthly reporting.'},
   ]},
-  {id:'water', title:'Water', always:true, trig:[F('potable')], bullets:[
+  {id:'water', title:'Water', always:true, trig:[F('potable'),F('waterEq')], bullets:[
     {k:'wa1', t:'Turn off taps when not in use.'},
     {k:'wa2', t:'Prevent excessive water use in manufacturing and maintenance processes.'},
     {k:'wa3', when:c=>c.f('potable'), t:c=>`Potable water monitoring point(s): ${c.codes('potable')}. Keep them accessible and protected from contamination.`},
     {k:'wa4', t:'Report leaking taps, hoses or pipes for repair.'},
+    {k:'wa5', when:c=>c.f('waterEq'), t:c=>`High water-consuming equipment: ${c.codes('waterEq')}. Turn off when not in use, check regularly for leaks, and use trigger nozzles or recycled water where possible.`},
+    {k:'wa6', when:c=>c.f('waterEq'), t:'Where meters are fitted, record water use from this equipment monthly for environmental reporting.'},
   ]},
-  {id:'energy', title:'Energy', always:true, trig:[], bullets:[
+  {id:'energy', title:'Energy', always:true, trig:[F('energyEq')], bullets:[
     {k:'en1', t:'Turn off equipment when not in use.'},
     {k:'en2', t:'Do not leave plant and vehicles idling.'},
     {k:'en3', t:'Turn off lights and air conditioning in site offices and amenities when unoccupied.'},
+    {k:'en4', when:c=>c.f('energyEq'), t:c=>`High energy-consuming equipment: ${c.codes('energyEq')}. Switch off or put on standby when not in use, and avoid running it longer than needed.`},
+    {k:'en5', when:c=>c.f('energyEq'), t:'Report faults, air leaks or abnormal running promptly. Poorly maintained equipment uses more energy.'},
   ]},
   {id:'notes', title:'Site-Specific Notes', dynamic:true, trig:[], bullets:[]},
   {id:'targets', title:'Environmental Targets', always:true, hl:true, trig:[], bullets:[
@@ -432,7 +446,7 @@ const DEFAULT = ()=>({
   v:1,
   meta:{siteName:'',address:'',project:'',docRef:'EHS-AUS-FRM-181',version:'01',appDate:todayISO(),preparedBy:'',approvedBy:'',ehsRep:'',ehsPhone:'',
     hours:'Monday to Friday: 7:00 am – 6:00 pm\nSaturday: 7:00 am – 1:00 pm\nNo works on Sundays or public holidays',
-    tWaste:'',tWater:'',tEnergy:'',orgName:'',logo:'',headerColor:'#d52b1e',borderColor:'#222222'},
+    tWaste:'',tWater:'',tEnergy:'',orgName:'Alstom'},
   view:{center:[-37.8136,144.9631],zoom:12},
   basemap:'aerial', labels:true,
   boundary:null, features:[], activities:{}, sec:{},
@@ -442,7 +456,7 @@ const DEFAULT = ()=>({
 /* =========================================================
    State & persistence
    ========================================================= */
-const KEY='site-ecp-builder-v1';
+const KEY='alstom-site-ecp-builder-v1';
 let S = load() || DEFAULT();
 let step = 0, sel = null, draw = null;
 
@@ -455,7 +469,8 @@ function merge(base, o){
   }
   return base;
 }
-function load(){ try{ const raw=localStorage.getItem(KEY); return raw?merge(DEFAULT(),JSON.parse(raw)):null; }catch(e){ return null; } }
+function fixTypes(st){ st.features=(st.features||[]).map(f=>f.type==='waste'?{...f,type:'wasteGen'}:f).filter(f=>CAT[f.type]); return st; }
+function load(){ try{ const raw=localStorage.getItem(KEY); return raw?fixTypes(merge(DEFAULT(),JSON.parse(raw))):null; }catch(e){ return null; } }
 let saveT=null;
 function persist(){ clearTimeout(saveT); saveT=setTimeout(()=>{ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){ /* quota or blocked: plan file save still works */ } },250); }
 
@@ -490,6 +505,10 @@ function glyph(g, ink){
     case 'well': return `<circle ${s} cx="12" cy="12" r="5"/><path ${s} d="M12 4.6v14.8 M4.6 12h14.8"/>`;
     case 'bars': return `<path ${s} d="M8 10.2v3.6 M11 7.6v8.8 M14 9.2v5.6 M17 11v2"/>`;
     case 'plus': return `<path ${s} stroke-width="2.3" d="M12 7.5v9 M7.5 12h9"/>`;
+    case 'binx': return `<path ${s} d="M8.2 9.5h7.6l-.8 7.8H9z M6.8 9.5h10.4 M10.3 7.3h3.4"/><path ${s} stroke-width="1.6" d="M10.4 11.9l3.2 3.2 M13.6 11.9l-3.2 3.2"/>`;
+    case 'recycle': return `<path ${s} stroke-width="1.6" d="M10.2 8.4l.9-1.5a1 1 0 0 1 1.8 0l1.6 2.7 M16.4 12.6l1.1 1.9a1 1 0 0 1-.9 1.5h-3 M10.6 16H7.4a1 1 0 0 1-.9-1.5l1.5-2.6"/><path fill="${ink}" d="M15.6 8.1l-.3 2.6-2.3-1.2z M12.6 14.6l1.9 1.4-1.9 1.4z M7 11l2.4.9-2 1.6z"/>`;
+    case 'bolt': return `<path fill="${ink}" d="M13.1 6.2 8.9 12.6h2.7l-.9 5.2 4.4-6.9h-2.8z"/>`;
+    case 'drop': return `<path fill="${ink}" d="M12 6.6c2 2.7 3.3 4.4 3.3 6.1a3.3 3.3 0 0 1-6.6 0c0-1.7 1.3-3.4 3.3-6.1z"/>`;
   }
   return '';
 }
@@ -498,11 +517,12 @@ function pointSvg(c, size=24){
   let shape='';
   if(c.shape==='square') shape=`<rect x="2" y="2" width="20" height="20" rx="3" fill="${c.color}" ${st}/>`;
   else if(c.shape==='triangle') shape=`<path d="M12 1.6 22.6 21.2H1.4Z" fill="${c.color}" ${st} stroke-linejoin="round"/>`;
+  else if(c.shape==='diamond') shape=`<path d="M12 1.2 22.8 12 12 22.8 1.2 12Z" fill="${c.color}" ${st} stroke-linejoin="round"/>`;
   else shape=`<circle cx="12" cy="12" r="10.4" fill="${c.color}" ${st}/>`;
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true">${shape}${glyph(c.glyph,ink)}</svg>`;
 }
 function swatchSvg(c, size=24){
-  if(c.k==='__boundary') return `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><rect x="3" y="5" width="18" height="14" fill="none" stroke="#fff" stroke-width="5"/><rect x="3" y="5" width="18" height="14" fill="none" stroke="#e8261b" stroke-width="2.4" stroke-dasharray="5 3"/></svg>`;
+  if(c.k==='__boundary') return `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><rect x="3" y="5" width="18" height="14" fill="none" stroke="#fff" stroke-width="5"/><rect x="3" y="5" width="18" height="14" fill="none" stroke="${BRAND.boundary}" stroke-width="2.4" stroke-dasharray="5 3"/></svg>`;
   if(c.geom==='point') return pointSvg(c,size);
   if(c.geom==='area') return `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><rect x="2.5" y="4" width="19" height="16" fill="${c.fill}" stroke="${c.color}" stroke-width="2" ${c.dash?`stroke-dasharray="${c.dash.split(' ').map(n=>n/2).join(' ')}"`:''}/></svg>`;
   if(c.geom==='line') return `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><path d="M2 15c5-6 9 2 20-5" fill="none" stroke="${c.color}" stroke-width="3" stroke-dasharray="5 3"/></svg>`;
@@ -516,7 +536,7 @@ function drawAll(group, {interactive=false, onPick=null, k=1}={}){
   group.clearLayers();
   if(S.boundary && S.boundary.length>2){
     L.polygon(S.boundary,{color:'#fff',weight:7*k,opacity:.9,fill:false,interactive:false}).addTo(group);
-    L.polygon(S.boundary,{color:'#e8261b',weight:3.2*k,dashArray:`${12*k} ${7*k}`,fill:false,interactive:false}).addTo(group);
+    L.polygon(S.boundary,{color:BRAND.boundary,weight:3.2*k,dashArray:`${12*k} ${7*k}`,fill:false,interactive:false}).addTo(group);
   }
   const codes=codeMap();
   const order={area:0,line:1,arrow:2,point:3}, sz=Math.round(24*k), lf=`font-size:${(10.5*k).toFixed(1)}px`;
@@ -614,7 +634,7 @@ function finishDraw(){
 }
 function updateTmp(cursor){
   tmpGroup.clearLayers(); if(!draw) return;
-  const c=draw.kind==='boundary'?{color:'#e8261b'}:CAT[draw.kind];
+  const c=draw.kind==='boundary'?{color:BRAND.boundary}:CAT[draw.kind];
   const pts=draw.pts.slice(); if(cursor && pts.length) pts.push(cursor);
   if(pts.length>1){
     if(draw.geom==='area' && pts.length>2) L.polygon(pts,{color:c.color,weight:2,dashArray:'6 4',fillColor:c.fill||c.color,fillOpacity:.2,interactive:false}).addTo(tmpGroup);
@@ -847,14 +867,7 @@ function sideDetails(){
   <h3>Environmental targets</h3>
   <div class="stack">${field('tWaste','Waste','text','placeholder="e.g. ≥ 80% diverted from landfill"')}${field('tWater','Water','text','placeholder="e.g. 10% reduction on FY25 baseline"')}${field('tEnergy','Energy','text','placeholder="e.g. 5% reduction in kWh per FTE"')}</div>
   <h3>Branding</h3>
-  <div class="stack">
-    ${field('orgName','Organisation name (shown if no logo)')}
-    <div class="row"><label class="btn" for="logoIn">${S.meta.logo?'Replace logo':'Upload logo'}</label><input type="file" id="logoIn" accept="image/*" hidden>
-      ${S.meta.logo?`<img src="${S.meta.logo}" alt="Logo preview" style="height:32px;max-width:120px;object-fit:contain;border:1px solid var(--line);border-radius:4px;padding:2px;background:#fff"><button class="btn sm danger" type="button" data-act="rmLogo">Remove</button>`:''}</div>
-    <label class="f" style="flex-direction:row;align-items:center;gap:10px">Header colour <input type="color" id="m_headerColor" data-m="headerColor" value="${esc(S.meta.headerColor)}" style="width:44px;height:30px;padding:0;border:1px solid var(--line);border-radius:4px"></label>
-    <label class="f" style="flex-direction:row;align-items:center;gap:10px">Document border colour <input type="color" id="m_borderColor" data-m="borderColor" value="${esc(S.meta.borderColor||'#222222')}" style="width:44px;height:30px;padding:0;border:1px solid var(--line);border-radius:4px"><button class="btn sm ghost" type="button" data-act="resetBd">Reset</button></label>
-    <p class="hint" style="margin:0">Border colour applies to the control boxes, the header underline and the map/legend dividers. The targets box follows the header colour.</p>
-  </div>`;
+  <p class="note">Alstom logo and brand colours are applied automatically and can't be changed.</p>`;
 }
 /* ---------- Step 5: Print ---------- */
 function sidePrint(){
@@ -900,10 +913,6 @@ side.addEventListener('change',e=>{
   if(t.dataset.sx==='bon'){ const id=t.closest('.sec').dataset.sec,k=t.closest('.bl').dataset.k,st=secState(id); st.off=st.off||{}; if(t.checked) delete st.off[k]; else st.off[k]=true; t.closest('.bl').classList.toggle('dis',!t.checked); persist(); }
   if(t.name==='paper'){ S.print.paper=t.value; persist(); buildPreview(); }
   if(t.id==='fullLegend'){ S.print.fullLegend=t.checked; persist(); buildPreview(); }
-  if(t.id==='logoIn' && t.files[0]){
-    const r=new FileReader(); r.onload=()=>{ shrinkImage(r.result,600).then(u=>{ S.meta.logo=u; persist(); renderSide(); }); }; r.readAsDataURL(t.files[0]);
-  }
-  if(t.dataset.m==='headerColor'){ S.meta.headerColor=t.value; persist(); }
 });
 side.addEventListener('submit',e=>{ e.preventDefault(); if(e.target.id==='searchForm') search($('#q').value); });
 side.addEventListener('click',e=>{
@@ -913,8 +922,6 @@ side.addEventListener('click',e=>{
   if(act==='boundary') { startDraw('boundary'); return; }
   if(act==='clearBoundary'){ S.boundary=null; persist(); renderMap(); renderSide(); }
   if(act==='zoomSite' && S.boundary) map.fitBounds(L.latLngBounds(S.boundary),{padding:[40,40]});
-  if(act==='resetBd'){ S.meta.borderColor='#222222'; persist(); renderSide(); }
-  if(act==='rmLogo'){ S.meta.logo=''; persist(); renderSide(); }
   if(act==='print') doPrint();
   if(t.dataset.fa){
     const id=t.closest('.fitem').dataset.id, f=S.features.find(x=>x.id===id); if(!f) return;
@@ -964,8 +971,8 @@ let pmap=null, pReady=false, buildToken=0;
 const PAGE_MM={A3:[420,297],A4:[297,210]};
 
 function headerHTML(){
-  const m=S.meta, hc=esc(m.headerColor||'#d52b1e');
-  const logo=m.logo?`<img src="${m.logo}" alt="">`:(m.orgName.trim()?`<span class="org">${esc(m.orgName)}</span>`:'<span class="ph-ph screen-only">Add a logo in Details</span>');
+  const m=S.meta, hc=BRAND.header;
+  const logo=ALSTOM_LOGO;
   return `<header class="ph"><div class="ph-logo">${logo}</div>
     <div class="ph-title" style="background:${hc}"><h1>Environmental Control Plan</h1>${m.siteName.trim()?`<p>${esc(m.siteName)}${m.project.trim()?' · '+esc(m.project):''}</p>`:''}</div>
     <div class="ph-ref" style="background:${hc}"><span>Document Reference:</span><b>${esc(m.docRef)}</b><span>Version ${esc(m.version)}</span></div>
@@ -1000,8 +1007,7 @@ function controlsBoxes(){
 }
 function pageShell(cls,inner,n,total){
   const pc=S.print.paper.toLowerCase();
-  const cv=v=>/^#[0-9a-f]{3,8}$/i.test(v||'')?v:'';
-  return `<section class="page ${pc}" style="--bd:${cv(S.meta.borderColor)||'#222'};--hc:${cv(S.meta.headerColor)||'#d52b1e'}">${headerHTML()}<div class="pb ${cls}">${inner}</div>${footerHTML(n,total)}</section>`;
+  return `<section class="page ${pc}" style="--bd:${BRAND.border};--hc:${BRAND.header}">${headerHTML()}<div class="pb ${cls}">${inner}</div>${footerHTML(n,total)}</section>`;
 }
 const northSVG=`<svg viewBox="0 0 40 56"><path d="M20 4 32 40 20 33 8 40z" fill="#111"/><path d="M20 4 20 33 8 40z" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="20" y="54" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="14" fill="#111">N</text></svg>`;
 
@@ -1034,6 +1040,10 @@ function layoutControls(pv,boxes){
   cols.innerHTML=boxes.join('');
   const u=S.print.paper==='A3'?1.4142:1;
   for(let fs=9.5; fs>=6.6; fs-=0.2){ cols.style.fontSize=(fs*u).toFixed(2)+'pt'; if(!over(cols)) return [h]; }
+  // Still too long: try four narrower columns before adding a page.
+  cols.style.columnCount=4;
+  for(let fs=8.6; fs>=6.4; fs-=0.2){ cols.style.fontSize=(fs*u).toFixed(2)+'pt'; if(!over(cols)) return [h]; }
+  cols.style.columnCount='';
   // Doesn't fit on one page: paginate at a readable size.
   cols.innerHTML=''; const fs=(7.6*u).toFixed(2)+'pt'; cols.style.fontSize=fs;
   const out=[h];
@@ -1091,7 +1101,7 @@ $('#btnOpen').onclick=()=>$('#fileOpen').click();
 $('#fileOpen').onchange=e=>{
   const file=e.target.files[0]; if(!file) return;
   const r=new FileReader();
-  r.onload=()=>{ try{ const o=JSON.parse(r.result); if(!o||!o.meta||!Array.isArray(o.features)) throw 0; S=merge(DEFAULT(),o); afterLoad(); }catch(err){ alert('That file is not a plan saved from this tool.'); } };
+  r.onload=()=>{ try{ const o=JSON.parse(r.result); if(!o||!o.meta||!Array.isArray(o.features)) throw 0; S=fixTypes(merge(DEFAULT(),o)); afterLoad(); }catch(err){ alert('That file is not a plan saved from this tool.'); } };
   r.readAsText(file); e.target.value='';
 };
 $('#btnNew').onclick=()=>{ if(!confirm('Start a new plan? Unsaved changes to the current plan will be lost.')) return; S=DEFAULT(); afterLoad(); };
@@ -1101,13 +1111,14 @@ function afterLoad(){ sel=null; cancelDraw(true); persist(); setBase(); map.setV
 function example(){
   const s=DEFAULT(), c0=[-37.8305,144.7905];
   const o=(dx,dy)=>[+(c0[0]+dy/111320).toFixed(7),+(c0[1]+dx/(111320*Math.cos(c0[0]*Math.PI/180))).toFixed(7)];
-  s.meta={...s.meta,siteName:'Example Rail Depot (sample data)',address:'Example Rd, Laverton North VIC',project:'Stabling yard upgrade',preparedBy:'Site EHS Manager',approvedBy:'Project Manager',ehsRep:'J. Citizen',ehsPhone:'0400 000 000',tWaste:'≥ 80% of construction waste diverted from landfill',tWater:'No uncontrolled discharges to stormwater',tEnergy:'Plant idling under 10 minutes',orgName:'Your Company'};
+  s.meta={...s.meta,siteName:'Example Rail Depot (sample data)',address:'Example Rd, Laverton North VIC',project:'Stabling yard upgrade',preparedBy:'Site EHS Manager',approvedBy:'Project Manager',ehsRep:'J. Citizen',ehsPhone:'0400 000 000',tWaste:'≥ 80% of construction waste diverted from landfill',tWater:'No uncontrolled discharges to stormwater',tEnergy:'Plant idling under 10 minutes'};
   s.boundary=[o(-190,120),o(170,130),o(185,-115),o(-175,-125)];
   const F=(type,coords,label='',note='')=>({id:uid(),type,label,note,coords});
   s.features=[
     F('receiver',[o(-260,170),o(-120,175),o(-125,240),o(-265,235)],'Residences – Example St'),
     F('sensenv',[o(210,60),o(300,70),o(295,-80),o(205,-90)],'Creek reserve'),
-    F('waste',[o(-140,90)],'Main bin bay'),F('waste',[o(110,-80)],'Workshop skip'),
+    F('wasteGen',[o(-150,90)],'Main bin bay'),F('wasteRec',[o(-150,66)],'Main bin bay'),F('wasteCon',[o(110,-80)],'Workshop'),
+    F('energyEq',[o(60,-70)],'Air compressor'),F('waterEq',[o(30,-100)],'Pressure washer'),
     F('spillkit',[o(-60,40)],'Refuelling pad'),F('spillkit',[o(95,-50)],'Workshop'),
     F('hazchem',[o(120,-95)],'Dangerous goods store','Flammables cabinet and 205 L drums on bunded pallets'),
     F('refuel',[o(-70,15)],'Refuelling pad'),
