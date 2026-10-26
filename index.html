@@ -47,6 +47,20 @@ button,input,select,textarea{font:inherit;color:inherit}
 .tb-actions{display:flex;gap:6px;flex-wrap:wrap}
 .tb-btn{background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:6px 11px;cursor:pointer;font-size:13px}
 .tb-btn:hover{background:var(--accent-soft)}
+.tb-btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.tb-btn.pri:hover{background:var(--accent-hover)}
+.modal{position:fixed;inset:0;z-index:2000;background:rgba(20,40,70,.45);display:grid;place-items:center;padding:16px max(16px,env(safe-area-inset-right,0px)) 16px max(16px,env(safe-area-inset-left,0px))}
+.modal-card{background:#fff;border-radius:10px;box-shadow:0 18px 50px rgba(20,40,70,.35);width:min(600px,100%);max-height:calc(100% - 32px);overflow:auto;padding:20px 22px}
+.modal-card h2{font:700 21px/1.15 var(--f-display);font-stretch:90%;margin:0 0 6px}
+.modal-card .actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px}
+.plans{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.plans li{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center}
+.plans li.cur{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.plans b{font-size:14px}
+.plans small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.plans .row{gap:4px;justify-content:flex-end}
+.toast{position:fixed;z-index:2100;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#fff;border-radius:8px;padding:10px 14px;font-size:13px;box-shadow:0 8px 24px rgba(20,40,70,.3);max-width:calc(100% - 32px)}
+@media print{.modal,.toast{display:none!important}}
 
 main{display:grid;grid-template-columns:400px 1fr;min-height:0}
 main.wide{grid-template-columns:540px 1fr}
@@ -242,10 +256,12 @@ details.na summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--mut
     </div>
     <div class="tb-actions">
       <button class="tb-btn" id="btnExample" type="button">Load example</button>
-      <button class="tb-btn" id="btnOpen" type="button">Open plan…</button>
-      <button class="tb-btn" id="btnSave" type="button">Save plan file</button>
+      <button class="tb-btn" id="btnPlans" type="button">My plans</button>
+      <button class="tb-btn" id="btnOpen" type="button">Open…</button>
       <button class="tb-btn" id="btnNew" type="button">New plan</button>
-      <input type="file" id="fileOpen" accept=".json,application/json" hidden>
+      <button class="tb-btn" id="btnSave" type="button" title="Download the plan as a small data file (.json)">Save plan file</button>
+      <button class="tb-btn pri" id="btnCopy" type="button" title="Download one file that reopens straight into this plan">Save editable copy</button>
+      <input type="file" id="fileOpen" accept=".html,.htm,.json,text/html,application/json" hidden>
     </div>
   </header>
   <main id="main">
@@ -268,9 +284,15 @@ details.na summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--mut
   </main>
 </div>
 
+<div class="modal" id="modal" hidden><div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle" id="modalCard"></div></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<!-- Plan data for an editable copy. Filled in by "Save editable copy"; empty in the master app. -->
+<script id="embeddedPlan" type="application/json"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 'use strict';
+/* Pristine copy of this page, used to build editable copies. Captured before anything changes the page. */
+const SOURCE_HTML='<!doctype html>\n'+document.documentElement.outerHTML;
 /* Alstom brand: fixed, not user-editable */
 const ALSTOM_LOGO=`<svg role="img" aria-label="Alstom" preserveAspectRatio="xMidYMid meet" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 329.832 90.954" enable-background="new 0 0 329.832 90.954" xml:space="preserve"> <g> <rect fill="none" width="329.832" height="90.954"/> <g> <g> <path fill="#DC3223" d="M250.891,31.493l-2.798,2.97c4.517,7.097,5.144,16.161,0.952,23.733l1.533-0.026 C255.788,49.715,255.71,39.556,250.891,31.493z M238.625,33.199l1.52-1.6c-7.59-7.025-20.177-6.867-27.506,0.666 c-4.367,4.483-6.427,10.485-5.434,16.14l1.527-0.047c0.087-7.89,6.538-14.389,14.675-14.57 c8.314-0.229,15.218,6.142,15.394,14.252c0.223,8.131-6.3,14.85-14.606,15.072c-4.174,0.102-7.955-1.441-10.746-4.001 l-2.159,2.215c-9.611-8.874-9.979-23.694-0.892-33.029c7.334-7.545,18.562-9.264,27.651-5.06l0.119,0.134l1.168-1.302 c-11.564-6.719-26.828-4.807-36.562,5.194c-11.502,11.788-10.973,30.411,1.13,41.594l2.183-2.224 c4.78,4.38,10.334,6.573,16.817,6.39c13.078-0.346,23.406-10.941,23.076-23.671C245.811,42.956,243.007,37.239,238.625,33.199z" /> <path fill="#1E3246" d="M89.217,23.185H78.221V67.77h31.147v-8.66h-20.15V23.185z M40.252,23.185L23.185,67.77h10.646 c1.938-6.624,10.381-11.63,18.242-12.328l-1.62-4.035c-3.306-0.434-8.164,0.096-11.11,1.373l7.195-18.863L60.482,67.77H71.11 L52.747,23.185H40.252z M151.013,31.814h14.654V67.77h11.267V31.814h14.726v-8.63h-40.646V31.814z M296.861,23.185L283.986,40.13 l-12.688-16.945h-9.885V67.77h11.265V40.528l10.551,14.41h1.607l10.533-14.41V67.77h11.279V23.185H296.861z M123.995,34.623 c0-3.583,8.13-6.704,20.81-2.149l0.737-8.803c-2.007-0.886-7.694-2.373-12.028-2.373c-9.237,0-19.708,3.401-19.708,14.481 c0,16.612,24.791,10.929,24.083,19.996c-0.276,3.52-5.524,4.375-9.957,4.375c-5.039,0-9.569-1.004-12.635-2.461l-1.052,9.564 c4.091,1.32,9.406,1.971,13.687,1.971c10.218,0,20.198-3.22,20.24-15.138C148.191,38.161,123.995,42.795,123.995,34.623z"/> </g> </g> </g> </svg>`;
 const BRAND={header:'#dc3223' /* Vibrant red */, border:'#1e3246' /* Carbon blue */, boundary:'#dc3223'};
@@ -452,13 +474,33 @@ const DEFAULT = ()=>({
   basemap:'aerial', labels:true,
   boundary:null, features:[], activities:{}, sec:{},
   print:{paper:'A3',fullLegend:false,zoomAdj:0},
+  id:'', rev:0, exportedRev:0, savedAt:'',
 });
 
 /* =========================================================
    State & persistence
    ========================================================= */
-const KEY='alstom-site-ecp-builder-v1';
-let S = load() || DEFAULT();
+const KEY='alstom-site-ecp-builder-v1';          // single autosave used by earlier versions
+const LIB_KEY='alstom-ecp-plans-v1', CUR_KEY='alstom-ecp-current-v1';
+function newId(){ return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function libRead(){ try{ return JSON.parse(localStorage.getItem(LIB_KEY)||'{}')||{}; }catch(e){ return {}; } }
+function libWrite(lib){ try{ localStorage.setItem(LIB_KEY,JSON.stringify(lib)); return true; }catch(e){ return false; } }
+function asPlan(o){ const p=fixTypes(merge(DEFAULT(),o)); if(!p.id) p.id=newId(); return p; }
+function readEmbedded(){ try{ const t=document.getElementById('embeddedPlan').textContent.trim(); return t?asPlan(JSON.parse(t)):null; }catch(e){ return null; } }
+function initState(){
+  const lib=libRead();
+  try{ const old=localStorage.getItem(KEY);   // bring the old single autosave into My plans
+    if(old && !Object.keys(lib).length){ const o=asPlan(JSON.parse(old)); lib[o.id]={updatedAt:Date.now(),data:o}; libWrite(lib); localStorage.setItem(CUR_KEY,o.id); }
+  }catch(e){}
+  const emb=readEmbedded();
+  if(emb){ const mine=lib[emb.id]; return {st:emb, embedded:true, newer:(mine && (mine.data.rev||0)>(emb.rev||0))?mine:null}; }
+  let cur=null; try{ cur=localStorage.getItem(CUR_KEY); }catch(e){}
+  if(cur && lib[cur]) return {st:asPlan(lib[cur].data)};
+  return {st:asPlan({})};
+}
+const BOOT=initState();
+let S = BOOT.st;
+let holdSave = !!BOOT.newer;   // don't overwrite newer browser changes until the user chooses
 let step = 0, sel = null, draw = null;
 
 function merge(base, o){
@@ -471,9 +513,21 @@ function merge(base, o){
   return base;
 }
 function fixTypes(st){ st.features=(st.features||[]).map(f=>f.type==='waste'?{...f,type:'wasteGen'}:f).filter(f=>CAT[f.type]); return st; }
-function load(){ try{ const raw=localStorage.getItem(KEY); return raw?fixTypes(merge(DEFAULT(),JSON.parse(raw))):null; }catch(e){ return null; } }
 let saveT=null;
-function persist(){ clearTimeout(saveT); saveT=setTimeout(()=>{ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){ /* quota or blocked: plan file save still works */ } },250); }
+const isBlank=st=>!st.boundary && !st.features.length && !st.meta.siteName.trim();
+/* persist(): a user change. persist(true): view-only change (pan/zoom), not counted as unsaved work. */
+function persist(quiet){ if(!quiet) S.rev=(S.rev||0)+1; clearTimeout(saveT); saveT=setTimeout(saveNow,250); }
+function saveNow(){
+  clearTimeout(saveT);
+  if(holdSave) return;
+  const lib=libRead();
+  if(isBlank(S) && !lib[S.id]) return;   // don't fill My plans with empty plans
+  lib[S.id]={updatedAt:Date.now(),data:S};
+  libWrite(lib);
+  try{ localStorage.setItem(CUR_KEY,S.id); }catch(e){}
+}
+addEventListener('pagehide',saveNow);
+addEventListener('beforeunload',saveNow);
 
 /* =========================================================
    Helpers
@@ -650,7 +704,7 @@ setBase();
 const fGroup=L.layerGroup().addTo(map);
 const tmpGroup=L.layerGroup().addTo(map);
 function renderMap(){ drawAll(fGroup,{interactive:!draw,onPick:id=>selectFeature(id,true)}); }
-map.on('moveend',()=>{ const c=map.getCenter(); S.view={center:[c.lat,c.lng],zoom:map.getZoom()}; persist(); });
+map.on('moveend',()=>{ const c=map.getCenter(); S.view={center:[c.lat,c.lng],zoom:map.getZoom()}; persist(true); });
 
 function selectFeature(id, fromMap){
   if(draw) return;
@@ -942,8 +996,9 @@ function sidePrint(){
   <h3>Print</h3>
   <button class="btn pri" type="button" id="printBtn" data-act="print" style="width:100%;justify-content:center;padding:10px">Print / Save as PDF</button>
   <p class="hint" style="margin-top:10px">If colours are missing, tick <b>Background graphics</b> under More settings. Set margins to <b>None</b>.</p>
-  <h3>Keep this plan</h3>
-  <p class="hint">Your work is saved in this browser automatically. Use <b>Save plan file</b> (top bar) to keep a copy you can reopen or hand to someone else.</p>`;
+  <h3>Keep this plan editable</h3>
+  <p class="hint">Your work saves in this browser automatically (see <b>My plans</b>). To update the plan later on another computer, or hand it to a colleague, save an editable copy and keep it in the same folder as the PDF.</p>
+  <button class="btn" type="button" data-act="copy" style="width:100%;justify-content:center">Save editable copy</button>`;
 }
 
 /* ---------- Sidebar events ---------- */
@@ -979,6 +1034,7 @@ side.addEventListener('click',e=>{
   if(act==='clearBoundary'){ S.boundary=null; persist(); renderMap(); renderSide(); }
   if(act==='zoomSite' && S.boundary) map.fitBounds(L.latLngBounds(S.boundary),{padding:[40,40]});
   if(act==='print') doPrint();
+  if(act==='copy') saveCopy();
   if(t.dataset.fa){
     const id=t.closest('.fitem').dataset.id, f=S.features.find(x=>x.id===id); if(!f) return;
     if(t.dataset.fa==='zoom'){ selectFeature(id); if(f.coords.length===1) map.setView(f.coords[0],Math.max(map.getZoom(),18)); else map.fitBounds(L.latLngBounds(f.coords),{padding:[60,60],maxZoom:19}); }
@@ -1141,28 +1197,101 @@ function setPrintBtn(msg){
   if(pb){ pb.disabled=!pReady; }
   if(step===4) $('#btnNext').disabled=!pReady;
 }
-function doPrint(){ if(step!==4){ go(4); return; } if(!pReady) return; window.print(); }
+function doPrint(force){
+  if(step!==4){ go(4); return; } if(!pReady) return;
+  if(!force && (S.rev||0)!==(S.exportedRev||0)){ saveReminder(); return; }
+  window.print();
+}
+function saveReminder(){
+  modal(`<h2 id="modalTitle">Save an editable copy first?</h2>
+    <p class="hint" style="margin:0">The PDF can't be edited later. Save an editable copy so you or a colleague can update this plan next time. Keep it in the same folder as the PDF.</p>
+    <div class="actions"><button class="btn ghost" type="button" data-m="close">Cancel</button><button class="btn" type="button" data-m="printOnly">Print without saving</button><button class="btn pri" type="button" data-m="copyPrint">Save editable copy, then print</button></div>`);
+}
 window.addEventListener('afterprint',()=>{ if(step===4) $('#btnNext').disabled=!pReady; });
 
 /* =========================================================
    Top bar: files
    ========================================================= */
-$('#btnSave').onclick=()=>{
-  const blob=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  const nm=(S.meta.siteName.trim()||'site').replace(/[^\w-]+/g,'_');
-  a.download=`ECP_${nm}_${todayISO()}.json`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
-};
+function fileBase(){
+  const nm=(S.meta.siteName.trim()||'site').replace(/[^\w-]+/g,'_').replace(/^_+|_+$/g,'');
+  const v=(S.meta.version||'').trim().replace(/[^\w.-]+/g,'');
+  return `ECP_${nm||'site'}${v?'_v'+v:''}_${todayISO()}`;
+}
+function download(name,text,type){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type}));
+  a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+}
+function markExported(){ S.exportedRev=S.rev; S.savedAt=new Date().toISOString(); saveNow(); }
+function saveCopy(){
+  markExported();
+  const json=JSON.stringify(S).replace(/</g,'\\u003c');
+  const title=`ECP – ${(S.meta.siteName.trim()||'Untitled plan')} · Alstom`.replace(/[<&]/g,'');
+  let html=SOURCE_HTML.replace(/(<script id="embeddedPlan" type="application\/json">)[\s\S]*?(<\/script>)/,(m,a,b)=>a+json+b);
+  html=html.replace(/<title>[\s\S]*?<\/title>/,()=>`<title>${title}</title>`);
+  download(fileBase()+'.html',html,'text/html');
+  toast('Editable copy saved. Open that file any time to keep working on this plan.');
+}
+function savePlanFile(){ markExported(); download(fileBase()+'.json',JSON.stringify(S,null,1),'application/json'); toast('Plan file saved. Reopen it with Open… in the app.'); }
+$('#btnCopy').onclick=saveCopy;
+$('#btnSave').onclick=savePlanFile;
 $('#btnOpen').onclick=()=>$('#fileOpen').click();
 $('#fileOpen').onchange=e=>{
   const file=e.target.files[0]; if(!file) return;
   const r=new FileReader();
-  r.onload=()=>{ try{ const o=JSON.parse(r.result); if(!o||!o.meta||!Array.isArray(o.features)) throw 0; S=fixTypes(merge(DEFAULT(),o)); afterLoad(); }catch(err){ alert('That file is not a plan saved from this tool.'); } };
+  r.onload=()=>{
+    try{
+      let txt=r.result;
+      if(/^\s*</.test(txt)){ const m=txt.match(/<script id="embeddedPlan" type="application\/json">([\s\S]*?)<\/script>/); if(!m||!m[1].trim()) throw 0; txt=m[1]; }
+      const o=JSON.parse(txt); if(!o||!o.meta||!Array.isArray(o.features)) throw 0;
+      saveNow(); S=asPlan(o); afterLoad(); toast(`Opened “${planName(S)}”.`);
+    }catch(err){ toast('That file is not a plan saved from this app. Choose an editable copy (.html) or a plan file (.json).'); }
+  };
   r.readAsText(file); e.target.value='';
 };
-$('#btnNew').onclick=()=>{ if(!confirm('Start a new plan? Unsaved changes to the current plan will be lost.')) return; S=DEFAULT(); afterLoad(); };
-$('#btnExample').onclick=()=>{ if((S.features.length||S.boundary)&&!confirm('Replace the current plan with the example?')) return; S=example(); afterLoad(); };
-function afterLoad(){ sel=null; cancelDraw(true); persist(); setBase(); map.setView(S.view.center,S.view.zoom); const b=boundsAll(); if(b) map.fitBounds(b,{padding:[40,40]}); updateChip(); go(step===4?4:0); }
+$('#btnNew').onclick=()=>{ saveNow(); S=asPlan({}); afterLoad(); toast('New plan started. Your previous plan is in My plans.'); };
+$('#btnExample').onclick=()=>{ saveNow(); S=example(); S.id=newId(); afterLoad(); };
+$('#btnPlans').onclick=openPlans;
+const planName=st=>(st.meta.siteName||'').trim()||'Untitled plan';
+const fmtWhen=t=>new Date(t).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'});
+function openPlans(){
+  saveNow();
+  const rows=Object.entries(libRead()).sort((a,b)=>b[1].updatedAt-a[1].updatedAt);
+  const list=rows.map(([id,e])=>{ const d=e.data, cur=id===S.id;
+    return `<li class="${cur?'cur':''}" data-id="${esc(id)}"><div style="min-width:0"><b>${esc(planName(d))}</b>${cur?' <span class="tag">Open now</span>':''}
+      <small>${esc(d.meta.docRef||'')} v${esc(d.meta.version||'')} · ${d.features.length} location${d.features.length===1?'':'s'} · edited ${esc(fmtWhen(e.updatedAt))}</small></div>
+      <div class="row">${cur?'':'<button class="btn sm pri" type="button" data-m="open">Open</button>'}<button class="btn sm" type="button" data-m="dup">Duplicate</button><button class="btn sm danger" type="button" data-m="del">Delete</button></div></li>`; }).join('');
+  modal(`<h2 id="modalTitle">My plans</h2>
+    <p class="hint" style="margin:0">Plans saved in this browser on this computer. To keep a plan safe or share it, use <b>Save editable copy</b> and store the file with the PDF.</p>
+    ${rows.length?`<ul class="plans">${list}</ul>`:'<div class="empty" style="margin-top:12px">No saved plans yet. Plans appear here as soon as you start marking a site.</div>'}
+    <div class="actions"><button class="btn" type="button" data-m="new">New plan</button><button class="btn pri" type="button" data-m="close">Close</button></div>`);
+}
+/* ---------- modal + toast ---------- */
+let lastFocus=null;
+function modal(html){ lastFocus=document.activeElement; $('#modalCard').innerHTML=html; $('#modal').hidden=false; const f=$('#modalCard').querySelector('.btn.pri')||$('#modalCard').querySelector('button'); if(f) f.focus(); }
+function closeModal(){ $('#modal').hidden=true; $('#modalCard').innerHTML=''; if(lastFocus&&lastFocus.focus) lastFocus.focus(); }
+let toastT=null;
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,4200); }
+$('#modal').addEventListener('click',e=>{
+  if(e.target.id==='modal'){ closeModal(); return; }
+  const b=e.target.closest('[data-m]'); if(!b) return;
+  const m=b.dataset.m, li=b.closest('li'), id=li&&li.dataset.id;
+  if(m==='close') closeModal();
+  if(m==='printOnly'){ closeModal(); doPrint(true); }
+  if(m==='copyPrint'){ closeModal(); saveCopy(); setTimeout(()=>doPrint(true),700); }
+  if(m==='new'){ closeModal(); $('#btnNew').click(); }
+  if(m==='open'){ const e2=libRead()[id]; if(e2){ saveNow(); S=asPlan(e2.data); closeModal(); afterLoad(); toast(`Opened “${planName(S)}”.`); } }
+  if(m==='dup'){ const lib=libRead(), e2=lib[id]; if(e2){ const c=asPlan(JSON.parse(JSON.stringify(e2.data))); c.id=newId(); c.meta.siteName=planName(c)+' (copy)'; c.rev=0; c.exportedRev=0; lib[c.id]={updatedAt:Date.now(),data:c}; libWrite(lib); openPlans(); } }
+  if(m==='del'){
+    if(b.dataset.armed!=='1'){ b.dataset.armed='1'; b.textContent='Confirm delete'; setTimeout(()=>{ if(b.isConnected){ b.dataset.armed=''; b.textContent='Delete'; } },4000); return; }
+    const lib=libRead(); delete lib[id]; libWrite(lib);
+    if(id===S.id){ S=asPlan({}); afterLoad(); }
+    openPlans();
+  }
+  if(m==='useMine'){ holdSave=false; S=asPlan(BOOT.newer.data); closeModal(); afterLoad(); }
+  if(m==='useCopy'){ holdSave=false; closeModal(); saveNow(); }
+});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !$('#modal').hidden) closeModal(); });
+function afterLoad(){ const r0=S.rev||0, e0=S.exportedRev||0; sel=null; cancelDraw(true); persist(); S.rev=r0; S.exportedRev=e0; setBase(); map.setView(S.view.center,S.view.zoom); const b=boundsAll(); if(b) map.fitBounds(b,{padding:[40,40]}); updateChip(); go(step===4?4:0); }
 
 function example(){
   const s=DEFAULT(), c0=[-37.8305,144.7905];
@@ -1196,6 +1325,12 @@ updateChip();
 renderMap();
 go(0);
 if(boundsAll()) map.fitBounds(boundsAll(),{padding:[40,40]});
+if(BOOT.embedded && !BOOT.newer) saveNow();
+if(BOOT.newer){
+  modal(`<h2 id="modalTitle">You have newer changes to this plan</h2>
+    <p class="hint" style="margin:0">This browser has changes to “${esc(planName(BOOT.newer.data))}” made on ${esc(fmtWhen(BOOT.newer.updatedAt))}, after this copy was saved.</p>
+    <div class="actions"><button class="btn" type="button" data-m="useCopy">Use the copy as saved</button><button class="btn pri" type="button" data-m="useMine">Use my latest changes</button></div>`);
+}
 </script>
 </body>
 </html>
